@@ -18,22 +18,22 @@
 ### 방법 1. `skills` CLI 사용 (권장)
 
 ```bash
-npx --yes skills add salesmap/s-skills --all -g
+npx --yes skills add Salesmap-tech/s-skill --all -g
 ```
 
 - 전역(`~/.claude/skills/`)에 설치되어 어떤 프로젝트에서든 사용 가능
-- 특정 스킬만 설치하려면 `--all` 대신 스킬 이름을 지정: `npx skills add salesmap/s-skills s-skill-linkedin-scrap -g`
+- 특정 스킬만 설치하려면 `--all` 대신 스킬 이름을 지정: `npx skills add Salesmap-tech/s-skill s-skill-linkedin-scrap -g`
 
 ### 방법 2. 수동 설치
 
 ```bash
-git clone https://github.com/salesmap/s-skills.git
-cp -r s-skills/s-skill-setup ~/.claude/skills/
-cp -r s-skills/s-skill-teardown ~/.claude/skills/
-cp -r s-skills/s-skill-linkedin-scrap ~/.claude/skills/
-cp -r s-skills/s-skill-work-log-scrap ~/.claude/skills/
-cp -r s-skills/s-skill-slack ~/.claude/skills/
-cp -r s-skills/s-skill-shiftee ~/.claude/skills/
+git clone https://github.com/Salesmap-tech/s-skill.git
+cp -r s-skill/s-skill-setup ~/.claude/skills/
+cp -r s-skill/s-skill-teardown ~/.claude/skills/
+cp -r s-skill/s-skill-linkedin-scrap ~/.claude/skills/
+cp -r s-skill/s-skill-work-log-scrap ~/.claude/skills/
+cp -r s-skill/s-skill-slack ~/.claude/skills/
+cp -r s-skill/s-skill-shiftee ~/.claude/skills/
 chmod +x ~/.claude/skills/s-skill-shiftee/shiftee
 ```
 
