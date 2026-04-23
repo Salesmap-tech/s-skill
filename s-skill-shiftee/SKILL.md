@@ -44,7 +44,14 @@ fi
 $SHIFTEE login
 ```
 
-→ 시프티 이메일/비밀번호 입력. 토큰이 `~/.config/shiftee-cli/config.json` (0600)에 저장된다.
+로그인 방식은 **브라우저 쿠키 토큰 붙여넣기**다 (이메일/비밀번호 아님):
+
+1. 브라우저로 https://shiftee.io 로그인
+2. F12 → Application(Storage) 탭 → Cookies → `https://shiftee.io`
+3. `shiftee_account_auth_token` 값을 복사해 프롬프트에 붙여넣기
+4. `shiftee_employee_auth_token` 값도 복사해 붙여넣기
+
+토큰은 `~/.config/shiftee-cli/config.json` (0600)에 저장된다. 토큰에는 `expires_at`이 있어 만료되면 쿠키를 다시 복사해야 한다.
 
 ## 사용 가능한 명령어
 

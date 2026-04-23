@@ -118,13 +118,19 @@ gh auth login
 
 ### 3. Shiftee CLI 로그인 (선택)
 
-`s-skill-shiftee` 스킬을 쓰려면 설치 후 한 번 로그인하면 됩니다.
+`s-skill-shiftee` 스킬을 쓰려면 설치 후 한 번 로그인하면 됩니다. 바이너리는 첫 호출 시 `~/.cache/s-skill-shiftee/shiftee`로 자동 다운로드되니, 그 경로를 바로 쓰시면 됩니다.
 
 ```bash
-~/.claude/skills/s-skill-shiftee/shiftee login
+~/.cache/s-skill-shiftee/shiftee login
 ```
 
-이메일/비밀번호를 입력하면 토큰이 `~/.config/shiftee-cli/config.json`(0600)에 저장됩니다. 이후 모든 `s-skill-shiftee` 호출이 자동 인증됩니다.
+로그인 방식은 **브라우저 쿠키 토큰 복사**입니다 (이메일/비밀번호 아님):
+
+1. https://shiftee.io 에 로그인한 브라우저 탭에서 F12 → Application(Storage) → Cookies → `https://shiftee.io`
+2. `shiftee_account_auth_token` 값을 프롬프트에 붙여넣기
+3. `shiftee_employee_auth_token` 값도 붙여넣기
+
+토큰은 `~/.config/shiftee-cli/config.json`(0600)에 저장되고, 이후 모든 `s-skill-shiftee` 호출이 자동 인증됩니다. 토큰 `expires_at`이 지나면 쿠키를 다시 복사해 재로그인해야 합니다.
 
 ## 사용법
 

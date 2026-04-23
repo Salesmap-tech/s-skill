@@ -348,20 +348,25 @@ Claude Code를 재시작해주세요. 재시작 후에 Slack MCP가 도구 목�
    ```
    이미 있으면 "✅ Shiftee 이미 로그인됨" 한 줄로 스킵.
 
-3. 로그인 안내:
+3. 로그인 안내 (이메일/비밀번호가 아니라 **브라우저 쿠키 토큰 2개**를 붙여넣는 방식임에 주의):
    ```
    Shiftee 로그인을 진행할게요. 아래 명령을 터미널에서 직접 실행해주세요:
 
    $SHIFTEE_BIN login
 
-   이메일과 비밀번호를 물어봅니다. 입력 후 토큰이 ~/.config/shiftee-cli/config.json 에 저장돼요.
-   완료하셨나요?
+   토큰은 브라우저에서 가져옵니다:
+   1. shiftee.io에 로그인된 상태에서 F12 → Application(또는 Storage) → Cookies → https://shiftee.io
+   2. `shiftee_account_auth_token` 값 복사해서 첫 번째 입력란에 붙여넣기
+   3. `shiftee_employee_auth_token` 값 복사해서 두 번째 입력란에 붙여넣기
+
+   토큰은 ~/.config/shiftee-cli/config.json (0600)에 저장됩니다. 완료하셨나요?
    ```
    → `AskUserQuestion`(네/문제있음). 네면 `$SHIFTEE_BIN me`로 검증.
 
 4. 검증 실패 시 흔한 원인:
-   - 이메일/비번 오타 → 재시도
-   - 2FA 활성 계정 → Shiftee 웹에서 앱 비밀번호 발급 필요
+   - 토큰 복사할 때 앞뒤 공백·줄바꿈 포함 → 정확한 쿠키 Value 필드만 복사
+   - 토큰 만료 (expires_at 지남) → Shiftee 재로그인 후 쿠키 다시 복사
+   - Shiftee 로그아웃 상태의 쿠키 → shiftee.io에 먼저 로그인한 뒤 쿠키 조회
    - Python 3 없음 → `python3 --version`으로 확인, 없으면 `brew install python` 안내
 
 ---

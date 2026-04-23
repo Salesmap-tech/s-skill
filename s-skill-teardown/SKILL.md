@@ -109,7 +109,7 @@ ToolSearch "+notion"    → Notion MCP
 
 **"뭐 하는 거예요?"** 면 설명:
 > `~/.config/shiftee-cli/config.json`에 저장된 account_token, employee_token을 삭제합니다.
-> 다시 쓰려면 `shiftee login`을 실행해서 이메일/비밀번호로 재로그인하면 됩니다.
+> 다시 쓰려면 `shiftee login`을 실행해서 브라우저 쿠키 토큰(shiftee.io의 `shiftee_account_auth_token` / `shiftee_employee_auth_token`)을 다시 붙여넣으면 됩니다.
 > Shiftee 계정 자체가 삭제되는 건 아닙니다.
 
 **"네"** 면:
