@@ -17,12 +17,21 @@
 
 ### 방법 1. `skills` CLI 사용 (권장)
 
+설치 범위를 둘 중 하나로 선택하세요.
+
+**A. 전역 설치** — 어떤 프로젝트에서든 사용 가능 (`~/.claude/skills/`)
+
 ```bash
 npx --yes skills add Salesmap-tech/s-skill --all -g
 ```
 
-- 전역(`~/.claude/skills/`)에 설치되어 어떤 프로젝트에서든 사용 가능
-- 특정 스킬만 설치하려면 `--all` 대신 스킬 이름을 지정: `npx skills add Salesmap-tech/s-skill s-skill-linkedin-scrap -g`
+**B. 현재 프로젝트에만 설치** — 이 레포에서만 사용 (`./.claude/skills/`)
+
+```bash
+npx --yes skills add Salesmap-tech/s-skill --all
+```
+
+- 특정 스킬만 설치하려면 `--all` 대신 스킬 이름을 지정: `npx skills add Salesmap-tech/s-skill s-skill-linkedin-scrap` (필요시 `-g` 추가)
 
 ### 방법 2. 수동 설치
 
