@@ -1,0 +1,856 @@
+#!/usr/bin/env python3
+"""
+Shiftee CLI - 시프티 커맨드라인 도구
+출퇴근 기록, 스케줄, 휴가 조회 등을 터미널에서 수행합니다.
+"""
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+from urllib import request, error
+
+CONFIG_DIR = Path.home() / ".config" / "shiftee-cli"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+BASE_URL = "https://shiftee.io"
+
+
+def load_config():
+    if not CONFIG_FILE.exists():
+        print("설정 파일이 없습니다. 먼저 'shiftee login'을 실행하세요.")
+        sys.exit(1)
+    with open(CONFIG_FILE) as f:
+        return json.load(f)
+
+
+def save_config(config):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+    os.chmod(CONFIG_FILE, 0o600)
+
+
+def api_request(method, path, config, body=None):
+    url = BASE_URL + path
+    headers = {
+        "Content-Type": "application/json",
+        "Cookie": (
+            f"shiftee_account_auth_token={config['account_token']}; "
+            f"shiftee_employee_auth_token={config['employee_token']}; "
+            f"shiftee_preferred_lang=ko"
+        ),
+    }
+    data = json.dumps(body).encode() if body else None
+    req = request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with request.urlopen(req) as resp:
+            return json.loads(resp.read().decode())
+    except error.HTTPError as e:
+        body_text = e.read().decode() if e.fp else ""
+        print(f"API 오류 ({e.code}): {body_text}")
+        sys.exit(1)
+
+
+def format_time(iso_str):
+    if not iso_str:
+        return "-"
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    # Convert to KST
+    kst = dt + timedelta(hours=9)
+    return kst.strftime("%H:%M")
+
+
+def format_date(iso_str):
+    if not iso_str:
+        return "-"
+    dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    kst = dt + timedelta(hours=9)
+    return kst.strftime("%Y-%m-%d")
+
+
+def format_duration(clock_in, clock_out):
+    if not clock_in or not clock_out:
+        return "-"
+    dt_in = datetime.fromisoformat(clock_in.replace("Z", "+00:00"))
+    dt_out = datetime.fromisoformat(clock_out.replace("Z", "+00:00"))
+    delta = dt_out - dt_in
+    hours = delta.seconds // 3600
+    minutes = (delta.seconds % 3600) // 60
+    return f"{hours}h {minutes}m"
+
+
+# ── Commands ──────────────────────────────────────────────
+
+def cmd_login(args):
+    """브라우저 쿠키로 로그인 설정"""
+    print("Shiftee CLI 로그인 설정")
+    print("=" * 40)
+    print()
+    print("브라우저 개발자도구(F12) > Application > Cookies 에서")
+    print("shiftee.io 도메인의 쿠키 값을 복사하세요.")
+    print()
+
+    account_token = input("shiftee_account_auth_token: ").strip()
+    employee_token = input("shiftee_employee_auth_token: ").strip()
+
+    if not account_token or not employee_token:
+        print("토큰이 비어있습니다.")
+        sys.exit(1)
+
+    config = {
+        "account_token": account_token,
+        "employee_token": employee_token,
+    }
+
+    # Verify tokens by fetching account info
+    try:
+        account = api_request("GET", "/api/account", config)
+        name = account["account"]["last_name"] + account["account"]["first_name"]
+        config["account_id"] = account["account"]["account_id"]
+        config["email"] = account["account"]["email"]
+        config["name"] = name
+    except SystemExit:
+        print("토큰이 유효하지 않습니다. 다시 확인해주세요.")
+        sys.exit(1)
+
+    # Get employee info
+    employees = api_request("GET", "/api/company/employee/all", config)
+    for ce in employees.get("companyEmployees", []):
+        if ce["account_id"] == config["account_id"]:
+            config["employee_id"] = ce["employee_id"]
+            config["company_id"] = ce["company_id"]
+            break
+
+    save_config(config)
+    print(f"\n로그인 성공! 안녕하세요, {name}님")
+    print(f"  계정: {config['email']}")
+    print(f"  직원 ID: {config.get('employee_id', '?')}")
+    print(f"  회사 ID: {config.get('company_id', '?')}")
+    print(f"\n설정 저장: {CONFIG_FILE}")
+
+
+def cmd_login_auto(args):
+    """브라우저 쿠키 DB에서 자동으로 토큰 추출"""
+    import sqlite3
+    import shutil
+    import tempfile
+
+    # Chrome cookie DB path (macOS)
+    cookie_paths = [
+        Path.home() / "Library/Application Support/Google/Chrome/Default/Cookies",
+        Path.home() / "Library/Application Support/Google/Chrome/Profile 1/Cookies",
+    ]
+
+    db_path = None
+    for p in cookie_paths:
+        if p.exists():
+            db_path = p
+            break
+
+    if not db_path:
+        print("Chrome 쿠키 DB를 찾을 수 없습니다. 'shiftee login'을 사용하세요.")
+        sys.exit(1)
+
+    # Chrome encrypts cookies on macOS, so we can't easily read them
+    # Fall back to manual login
+    print("macOS Chrome 쿠키는 암호화되어 자동 추출이 어렵습니다.")
+    print("대신 'shiftee login'으로 수동 설정하세요.")
+    sys.exit(1)
+
+
+def cmd_me(args):
+    """내 정보 조회"""
+    config = load_config()
+    account = api_request("GET", "/api/account", config)
+    acc = account["account"]
+
+    eid = config.get("employee_id")
+    if eid:
+        emp_data = api_request("GET", f"/api/company/employee/auth?employee_id={eid}", config)
+        emp = emp_data["employee"]
+    else:
+        emp = None
+
+    print(f"이름: {acc['last_name']}{acc['first_name']}")
+    print(f"이메일: {acc['email']}")
+    print(f"언어: {acc['lang']}")
+    print(f"시간대: {acc['timezone']}")
+    if emp:
+        print(f"직원 ID: {emp['employee_id']}")
+        print(f"회사 ID: {emp['company_id']}")
+        print(f"권한: {emp['access_level']}")
+        dof = emp.get("date_of_employment")
+        if dof:
+            print(f"입사일: {format_date(dof)}")
+
+
+def cmd_attendance(args):
+    """출퇴근 기록 조회"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    today = datetime.now()
+    if args.month:
+        # 특정 월
+        year, month = args.month.split("-") if "-" in args.month else (str(today.year), args.month)
+        start = f"{year}-{int(month):02d}-01T00:00:00Z"
+        if int(month) == 12:
+            end = f"{int(year)+1}-01-01T00:00:00Z"
+        else:
+            end = f"{year}-{int(month)+1:02d}-01T00:00:00Z"
+    elif args.date:
+        start = f"{args.date}T00:00:00Z"
+        end_dt = datetime.strptime(args.date, "%Y-%m-%d") + timedelta(days=1)
+        end = end_dt.strftime("%Y-%m-%dT00:00:00Z")
+    else:
+        # 이번 달
+        start = today.replace(day=1).strftime("%Y-%m-%dT00:00:00Z")
+        if today.month == 12:
+            end = today.replace(year=today.year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+        else:
+            end = today.replace(month=today.month + 1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "attendances": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        }
+    })
+
+    attendances = data.get("attendances", [])
+    if not attendances:
+        print("출퇴근 기록이 없습니다.")
+        return
+
+    # Sort by clock_in_time
+    attendances.sort(key=lambda a: a.get("clock_in_time", ""))
+
+    # Deduplicate by date (keep the one with both clock_in and clock_out, or the first)
+    seen_dates = {}
+    for a in attendances:
+        date_key = format_date(a["clock_in_time"])
+        if date_key not in seen_dates:
+            seen_dates[date_key] = a
+        elif a.get("clock_out_time") and not seen_dates[date_key].get("clock_out_time"):
+            seen_dates[date_key] = a
+
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+
+    print(f"{'날짜':<14} {'요일':<4} {'출근':<8} {'퇴근':<8} {'근무시간':<10} {'메모'}")
+    print("-" * 65)
+
+    for date_key in sorted(seen_dates.keys()):
+        a = seen_dates[date_key]
+        ci = a.get("clock_in_time")
+        co = a.get("clock_out_time")
+        dt = datetime.fromisoformat(ci.replace("Z", "+00:00")) + timedelta(hours=9)
+        weekday = weekday_names[dt.weekday()]
+        note = (a.get("note") or "").strip()[:20]
+        print(f"{date_key:<14} {weekday:<4} {format_time(ci):<8} {format_time(co):<8} {format_duration(ci, co):<10} {note}")
+
+
+def cmd_today(args):
+    """오늘 출퇴근 상태"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    today = datetime.now()
+    start = today.strftime("%Y-%m-%dT00:00:00Z")
+    end_dt = today + timedelta(days=1)
+    end = end_dt.strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "attendances": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+        "shifts": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+        "leaves": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+    })
+
+    print(f"📅 {today.strftime('%Y-%m-%d')} 오늘의 근무 현황")
+    print("=" * 40)
+
+    # Shifts
+    shifts = data.get("shifts", [])
+    if shifts:
+        for s in shifts:
+            st = format_time(s.get("start_time"))
+            et = format_time(s.get("end_time"))
+            print(f"  스케줄: {st} ~ {et}")
+
+    # Attendances
+    attendances = data.get("attendances", [])
+    if attendances:
+        for a in attendances:
+            ci = format_time(a.get("clock_in_time"))
+            co = format_time(a.get("clock_out_time"))
+            dur = format_duration(a.get("clock_in_time"), a.get("clock_out_time"))
+            status = "근무중" if not a.get("clock_out_time") else "퇴근완료"
+            print(f"  출근: {ci}  퇴근: {co}  ({dur})  [{status}]")
+    else:
+        print("  아직 출근 기록 없음")
+
+    # Leaves
+    leaves = data.get("leaves", [])
+    if leaves:
+        for l in leaves:
+            print(f"  휴가: {l.get('leave_type_name', '휴가')}")
+
+
+def cmd_schedule(args):
+    """스케줄 조회"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    today = datetime.now()
+    if args.week:
+        # 이번 주
+        start_dt = today - timedelta(days=today.weekday())
+        end_dt = start_dt + timedelta(days=7)
+    elif args.month:
+        start_dt = today.replace(day=1)
+        if today.month == 12:
+            end_dt = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            end_dt = today.replace(month=today.month + 1, day=1)
+    else:
+        # 기본: 이번 주
+        start_dt = today - timedelta(days=today.weekday())
+        end_dt = start_dt + timedelta(days=7)
+
+    start = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+    end = end_dt.strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "shifts": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+        "leaves": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+    })
+
+    shifts = data.get("shifts", [])
+    leaves = data.get("leaves", [])
+
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+
+    if not shifts and not leaves:
+        print("해당 기간에 스케줄이 없습니다.")
+        return
+
+    print(f"{'날짜':<14} {'요일':<4} {'시작':<8} {'종료':<8} {'유형'}")
+    print("-" * 50)
+
+    events = []
+    for s in shifts:
+        events.append({
+            "date": s.get("start_time"),
+            "start": format_time(s.get("start_time")),
+            "end": format_time(s.get("end_time")),
+            "type": "근무",
+        })
+    for l in leaves:
+        events.append({
+            "date": l.get("start_time"),
+            "start": format_time(l.get("start_time")),
+            "end": format_time(l.get("end_time")),
+            "type": "휴가",
+        })
+
+    events.sort(key=lambda e: e["date"] or "")
+    for e in events:
+        date_str = format_date(e["date"])
+        dt = datetime.fromisoformat(e["date"].replace("Z", "+00:00")) + timedelta(hours=9)
+        weekday = weekday_names[dt.weekday()]
+        print(f"{date_str:<14} {weekday:<4} {e['start']:<8} {e['end']:<8} {e['type']}")
+
+
+def cmd_leaves(args):
+    """휴가 기록 조회"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    today = datetime.now()
+    start = today.replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    end = today.replace(year=today.year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "leaves": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        }
+    })
+
+    leaves = data.get("leaves", [])
+    if not leaves:
+        print("올해 휴가 기록이 없습니다.")
+        return
+
+    leaves.sort(key=lambda l: l.get("start_time", ""))
+
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+    total_deduction = 0
+
+    print(f"{'날짜':<14} {'요일':<4} {'유형':<8} {'차감':<6} {'사유'}")
+    print("-" * 55)
+    for l in leaves:
+        date_str = format_date(l.get("start_time"))
+        dt = datetime.fromisoformat(l["start_time"].replace("Z", "+00:00")) + timedelta(hours=9)
+        weekday = weekday_names[dt.weekday()]
+        leave_type = l.get("leave_type") or l.get("name") or "휴가"
+        deduction = l.get("annual_leave_deduction", 0)
+        total_deduction += deduction
+        note = (l.get("note") or "").strip()[:25]
+        print(f"{date_str:<14} {weekday:<4} {leave_type:<8} {deduction:<6} {note}")
+
+    print("-" * 55)
+    print(f"총 {len(leaves)}건, 연차 {total_deduction}일 차감")
+
+
+def cmd_fix(args):
+    """출퇴근 수정 요청"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    # 날짜의 출퇴근 기록 조회
+    date_str = args.date
+    start = f"{date_str}T00:00:00Z"
+    end_dt = datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)
+    end = end_dt.strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "attendances": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        }
+    })
+
+    attendances = data.get("attendances", [])
+
+    # 승인자 ID 조회 (최근 요청에서 가져오기)
+    req_data = api_request("POST", "/api/batch", config, {
+        "requests": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        }
+    })
+    # 최근 승인된 요청에서 승인자 찾기
+    approver_id = config.get("approver_id")
+    if not approver_id:
+        # 올해 요청에서 승인자 찾기
+        year_start = datetime.now().replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+        year_end = datetime.now().replace(year=datetime.now().year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+        all_req = api_request("POST", "/api/batch", config, {
+            "requests": {
+                "employee_ids": [eid],
+                "date_ranges": [[year_start, year_end]],
+            }
+        })
+        for r in all_req.get("requests", []):
+            approvals = r.get("requested_employee_approvals", [])
+            if approvals:
+                approver_id = approvals[0]["employee_id"]
+                config["approver_id"] = approver_id
+                save_config(config)
+                break
+
+    if not approver_id:
+        print("승인자를 찾을 수 없습니다. config.json에 approver_id를 추가하세요.")
+        sys.exit(1)
+
+    def parse_time_to_utc(date_str, time_str):
+        """HH:MM (KST) -> UTC ISO string"""
+        h, m = map(int, time_str.split(":"))
+        kst = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=h, minute=m)
+        utc = kst - timedelta(hours=9)
+        return utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if args.action == "clock-out":
+        # 퇴근 시간 수정
+        if not attendances:
+            print(f"{date_str}에 출근 기록이 없습니다.")
+            sys.exit(1)
+
+        att = attendances[0]
+        clock_out_utc = parse_time_to_utc(date_str, args.time)
+
+        request_body = {
+            "requested_employee_ids": [approver_id],
+            "data": {
+                "attendance_id": att["attendance_id"],
+                "previous_clock_in_time": att["clock_in_time"].split(".")[0] + "Z",
+                "clock_out_time": clock_out_utc,
+                "tags": ["past_attendance"],
+                "note": args.note or ".",
+                "requestType": "edit_attendance",
+            }
+        }
+        if att.get("clock_out_time"):
+            request_body["data"]["previous_clock_out_time"] = att["clock_out_time"].split(".")[0] + "Z"
+
+        print(f"출퇴근 수정 요청:")
+        print(f"  날짜: {date_str}")
+        print(f"  출근: {format_time(att['clock_in_time'])}")
+        print(f"  퇴근: {args.time} (수정)")
+        print(f"  승인자: {approver_id}")
+
+        result = api_request("POST", "/api/request", config, request_body)
+        req = result["request"]
+        print(f"\n요청 완료! (request_id: {req['request_id']}, 상태: {req['status']})")
+
+    elif args.action == "clock-in":
+        # 출근 시간 수정
+        if not attendances:
+            print(f"{date_str}에 출근 기록이 없습니다.")
+            sys.exit(1)
+
+        att = attendances[0]
+        clock_in_utc = parse_time_to_utc(date_str, args.time)
+
+        request_body = {
+            "requested_employee_ids": [approver_id],
+            "data": {
+                "attendance_id": att["attendance_id"],
+                "previous_clock_in_time": att["clock_in_time"].split(".")[0] + "Z",
+                "clock_in_time": clock_in_utc,
+                "tags": ["past_attendance"],
+                "note": args.note or ".",
+                "requestType": "edit_attendance",
+            }
+        }
+        if att.get("clock_out_time"):
+            request_body["data"]["previous_clock_out_time"] = att["clock_out_time"].split(".")[0] + "Z"
+
+        print(f"출퇴근 수정 요청:")
+        print(f"  날짜: {date_str}")
+        print(f"  출근: {args.time} (수정)")
+        print(f"  퇴근: {format_time(att.get('clock_out_time'))}")
+        print(f"  승인자: {approver_id}")
+
+        result = api_request("POST", "/api/request", config, request_body)
+        req = result["request"]
+        print(f"\n요청 완료! (request_id: {req['request_id']}, 상태: {req['status']})")
+
+    elif args.action == "create":
+        # 출퇴근 기록 생성 (기록 자체가 없는 날)
+        clock_in_utc = parse_time_to_utc(date_str, args.time)
+        clock_out_utc = parse_time_to_utc(date_str, args.time2) if args.time2 else None
+
+        req_data = {
+            "location_id_for_on_call": config.get("location_id", 384605),
+            "position_id_for_on_call": config.get("position_id", 219902),
+            "clock_in_time": clock_in_utc,
+            "tags": ["past_attendance"],
+            "note": args.note or ".",
+            "requestType": "create_attendance",
+        }
+        if clock_out_utc:
+            req_data["clock_out_time"] = clock_out_utc
+
+        request_body = {
+            "requested_employee_ids": [approver_id],
+            "data": req_data,
+        }
+
+        print(f"출퇴근 생성 요청:")
+        print(f"  날짜: {date_str}")
+        print(f"  출근: {args.time}")
+        print(f"  퇴근: {args.time2 or '(없음)'}")
+        print(f"  승인자: {approver_id}")
+
+        result = api_request("POST", "/api/request", config, request_body)
+        req = result["request"]
+        print(f"\n요청 완료! (request_id: {req['request_id']}, 상태: {req['status']})")
+
+    else:
+        print(f"알 수 없는 action: {args.action}")
+        print("사용법: shiftee fix clock-out 2026-03-26 21:00")
+        sys.exit(1)
+
+
+def cmd_cancel(args):
+    """요청 취소"""
+    config = load_config()
+    request_id = args.request_id
+    result = api_request("PATCH", f"/api/request/{request_id}/cancelled", config)
+    req = result["request"]
+    print(f"요청 취소 완료! (request_id: {req['request_id']}, 상태: {req['status']})")
+
+
+def cmd_requests(args):
+    """내 요청 내역 조회"""
+    config = load_config()
+    eid = config["employee_id"]
+
+    today = datetime.now()
+    if args.all:
+        start = today.replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    else:
+        start = (today - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00Z")
+    end = (today + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "requests": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        }
+    })
+
+    requests_list = data.get("requests", [])
+    if not requests_list:
+        print("요청 내역이 없습니다.")
+        return
+
+    requests_list.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+
+    print(f"{'ID':<12} {'상태':<10} {'유형':<20} {'생성일':<14} {'메모'}")
+    print("-" * 70)
+    for r in requests_list:
+        rid = r["request_id"]
+        status = r["status"]
+        req_type = r.get("data", {}).get("requestType", "?")
+        created = format_date(r.get("created_at"))
+        note = (r.get("data", {}).get("note") or "")[:20]
+        print(f"{rid:<12} {status:<10} {req_type:<20} {created:<14} {note}")
+
+
+def cmd_missing(args):
+    """출퇴근 누락 조회"""
+    config = load_config()
+    eid = config["employee_id"]
+    from datetime import date as date_cls
+
+    today = datetime.now()
+    start = today.replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    end = today.strftime("%Y-%m-%dT23:59:59Z")
+
+    data = api_request("POST", "/api/batch", config, {
+        "attendances": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+        "leaves": {
+            "employee_ids": [eid],
+            "date_ranges": [[start, end]],
+        },
+    })
+
+    attendances = data.get("attendances", [])
+    leaves = data.get("leaves", [])
+
+    # 출근 기록이 있는 날짜 (KST)
+    att_dates = {}
+    for a in attendances:
+        ci = a.get("clock_in_time")
+        if not ci:
+            continue
+        dt = datetime.fromisoformat(ci.replace("Z", "+00:00")) + timedelta(hours=9)
+        d = dt.date()
+        co = a.get("clock_out_time")
+        if d not in att_dates:
+            att_dates[d] = {"in": ci, "out": co, "att": a}
+        elif co and not att_dates[d]["out"]:
+            att_dates[d] = {"in": ci, "out": co, "att": a}
+
+    # 휴가 날짜
+    leave_dates = set()
+    for l in leaves:
+        st = l.get("start_time")
+        if not st:
+            continue
+        dt = datetime.fromisoformat(st.replace("Z", "+00:00")) + timedelta(hours=9)
+        leave_dates.add(dt.date())
+        et = l.get("end_time")
+        if et:
+            edt = datetime.fromisoformat(et.replace("Z", "+00:00")) + timedelta(hours=9)
+            if edt.date() != dt.date():
+                leave_dates.add(edt.date())
+
+    # 공휴일 (2026년 기준)
+    holidays = {
+        date_cls(2026, 1, 1),   # 신정
+        date_cls(2026, 1, 27),  # 설날 연휴
+        date_cls(2026, 1, 28),  # 설날
+        date_cls(2026, 1, 29),  # 설날 연휴
+        date_cls(2026, 3, 1),   # 삼일절
+        date_cls(2026, 3, 2),   # 삼일절 대체
+        date_cls(2026, 5, 5),   # 어린이날
+        date_cls(2026, 5, 24),  # 부처님오신날
+        date_cls(2026, 6, 6),   # 현충일
+        date_cls(2026, 8, 15),  # 광복절
+        date_cls(2026, 9, 24),  # 추석 연휴
+        date_cls(2026, 9, 25),  # 추석
+        date_cls(2026, 9, 26),  # 추석 연휴
+        date_cls(2026, 10, 3),  # 개천절
+        date_cls(2026, 10, 9),  # 한글날
+        date_cls(2026, 12, 25), # 크리스마스
+    }
+
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+    missing_no_record = []
+    missing_no_clockout = []
+
+    d = date_cls(2026, 1, 1)
+    end_date = today.date()
+    while d <= end_date:
+        if d.weekday() >= 5 or d in holidays or d in leave_dates:
+            d += timedelta(days=1)
+            continue
+
+        if d not in att_dates:
+            missing_no_record.append(d)
+        elif not att_dates[d]["out"]:
+            missing_no_clockout.append((d, att_dates[d]))
+
+        d += timedelta(days=1)
+
+    if not missing_no_record and not missing_no_clockout:
+        print("출퇴근 누락 없음!")
+        return
+
+    if missing_no_record:
+        print(f"출퇴근 기록 없음 ({len(missing_no_record)}건):")
+        print(f"  {'날짜':<14} {'요일'}")
+        print(f"  {'-' * 20}")
+        for d in missing_no_record:
+            wd = weekday_names[d.weekday()]
+            print(f"  {d.isoformat():<14} {wd}")
+
+    if missing_no_clockout:
+        print(f"\n퇴근 미찍음 ({len(missing_no_clockout)}건):")
+        print(f"  {'날짜':<14} {'요일':<4} {'출근'}")
+        print(f"  {'-' * 30}")
+        for d, info in missing_no_clockout:
+            wd = weekday_names[d.weekday()]
+            ci = format_time(info["in"])
+            print(f"  {d.isoformat():<14} {wd:<4} {ci}")
+
+
+def cmd_raw(args):
+    """원시 API 호출 (디버깅용)"""
+    config = load_config()
+    method = args.method.upper()
+    path = args.path if args.path.startswith("/") else "/" + args.path
+
+    body = None
+    if args.body:
+        body = json.loads(args.body)
+
+    result = api_request(method, path, config, body)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def cmd_status(args):
+    """설정 상태 확인"""
+    if not CONFIG_FILE.exists():
+        print("설정 파일 없음. 'shiftee login'을 실행하세요.")
+        return
+
+    config = load_config()
+    print(f"설정 파일: {CONFIG_FILE}")
+    print(f"이름: {config.get('name', '?')}")
+    print(f"이메일: {config.get('email', '?')}")
+    print(f"직원 ID: {config.get('employee_id', '?')}")
+    print(f"회사 ID: {config.get('company_id', '?')}")
+
+
+# ── Main ──────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Shiftee CLI - 시프티 커맨드라인 도구",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+사용 예시:
+  shiftee login              브라우저 쿠키로 로그인
+  shiftee today              오늘 출퇴근 현황
+  shiftee attendance         이번 달 출퇴근 기록
+  shiftee attendance -m 3    3월 출퇴근 기록
+  shiftee schedule           이번 주 스케줄
+  shiftee schedule --month   이번 달 스케줄
+  shiftee leaves             올해 휴가 기록
+  shiftee me                 내 정보
+  shiftee missing               출퇴근 누락 조회
+  shiftee fix clock-out 2026-03-26 21:00   퇴근 수정 요청
+  shiftee fix clock-in 2026-03-26 09:30    출근 수정 요청
+  shiftee fix create 2026-03-26 09:30 --time2 21:00  출퇴근 생성
+  shiftee raw GET /api/account   원시 API 호출
+        """,
+    )
+
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("login", help="로그인 설정")
+    sub.add_parser("login-auto", help="브라우저에서 자동 로그인")
+    sub.add_parser("me", help="내 정보")
+    sub.add_parser("today", help="오늘 근무 현황")
+    sub.add_parser("status", help="설정 상태 확인")
+
+    att = sub.add_parser("attendance", help="출퇴근 기록")
+    att.add_argument("-m", "--month", help="조회할 월 (예: 3 또는 2026-3)")
+    att.add_argument("-d", "--date", help="특정 날짜 (예: 2026-04-01)")
+
+    sch = sub.add_parser("schedule", help="스케줄 조회")
+    sch.add_argument("-w", "--week", action="store_true", default=True, help="이번 주 (기본)")
+    sch.add_argument("-m", "--month", action="store_true", help="이번 달")
+
+    sub.add_parser("leaves", help="휴가 기록")
+
+    fix = sub.add_parser("fix", help="출퇴근 수정/생성 요청")
+    fix.add_argument("action", choices=["clock-in", "clock-out", "create"], help="수정 유형")
+    fix.add_argument("date", help="날짜 (예: 2026-03-26)")
+    fix.add_argument("time", help="시간 KST (예: 21:00)")
+    fix.add_argument("--time2", help="퇴근시간 (create일 때만, 예: 21:00)")
+    fix.add_argument("-n", "--note", default=".", help="메모 (기본: .)")
+
+    sub.add_parser("missing", help="출퇴근 누락 조회")
+
+    cancel = sub.add_parser("cancel", help="요청 취소")
+    cancel.add_argument("request_id", type=int, help="취소할 요청 ID")
+
+    reqs = sub.add_parser("requests", help="내 요청 내역")
+    reqs.add_argument("-a", "--all", action="store_true", help="올해 전체 (기본: 최근 30일)")
+
+    raw = sub.add_parser("raw", help="원시 API 호출")
+    raw.add_argument("method", help="HTTP 메소드 (GET/POST/PUT/DELETE)")
+    raw.add_argument("path", help="API 경로 (예: /api/account)")
+    raw.add_argument("-b", "--body", help="요청 본문 (JSON)")
+
+    args = parser.parse_args()
+
+    commands = {
+        "login": cmd_login,
+        "login-auto": cmd_login_auto,
+        "me": cmd_me,
+        "today": cmd_today,
+        "attendance": cmd_attendance,
+        "schedule": cmd_schedule,
+        "leaves": cmd_leaves,
+        "fix": cmd_fix,
+        "cancel": cmd_cancel,
+        "requests": cmd_requests,
+        "missing": cmd_missing,
+        "raw": cmd_raw,
+        "status": cmd_status,
+    }
+
+    if args.command in commands:
+        commands[args.command](args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
