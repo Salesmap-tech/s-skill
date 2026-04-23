@@ -17,23 +17,21 @@
 
 ### 방법 1. `skills` CLI 사용 (권장)
 
-아래 명령을 실행하면 **설치할 에이전트를 대화형으로 물어봅니다** (Claude Code만 고르거나, 여러 개 선택 가능). 설치 범위만 둘 중 하나로 고르세요.
+아래 명령을 실행하면 **6개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
 
 **A. 전역 설치** — 어떤 프로젝트에서든 사용 가능 (`~/.claude/skills/`)
 
 ```bash
-npx --yes skills add Salesmap-tech/s-skill -g
+npx --yes skills add Salesmap-tech/s-skill -s '*' -g
 ```
 
 **B. 현재 프로젝트에만 설치** — 이 레포에서만 사용 (`./.claude/skills/`)
 
 ```bash
-npx --yes skills add Salesmap-tech/s-skill
+npx --yes skills add Salesmap-tech/s-skill -s '*'
 ```
 
-실행 흐름:
-1. **설치할 스킬 선택** (스페이스로 토글, 엔터 확정)
-2. **설치할 에이전트 선택** — Claude Code가 기본 체크돼 있음. 필요한 것만 남기고 엔터
+에이전트 선택 화면에서 스페이스로 토글, 엔터로 확정. Claude Code만 쓴다면 그냥 엔터.
 
 > ⚠️ `--all` 플래그는 붙이지 마세요. 시스템에 감지된 **모든 AI 에이전트 디렉토리**(`.augment`, `.bob`, `.cortex`, `.roo`, `.windsurf` 등 30+ 개)에 한꺼번에 설치됩니다.
 
