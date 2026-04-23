@@ -5,12 +5,25 @@ Shiftee CLI - 시프티 커맨드라인 도구
 """
 
 import argparse
+import base64
 import json
 import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib import request, error
+
+
+def jwt_payload(token):
+    """Decode a JWT payload without verifying the signature."""
+    parts = token.split(".")
+    if len(parts) < 2:
+        return {}
+    encoded = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(encoded).decode())
+    except Exception:
+        return {}
 
 CONFIG_DIR = Path.home() / ".config" / "shiftee-cli"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -104,24 +117,25 @@ def cmd_login(args):
         "employee_token": employee_token,
     }
 
-    # Verify tokens by fetching account info
+    # IDs live in the JWT payloads — more reliable than depending on API schemas.
+    emp_claims = jwt_payload(employee_token)
+    acc_claims = jwt_payload(account_token)
+    for key in ("account_id", "employee_id", "company_id"):
+        if emp_claims.get(key) is not None:
+            config[key] = emp_claims[key]
+    if "account_id" not in config and acc_claims.get("account_id") is not None:
+        config["account_id"] = acc_claims["account_id"]
+
+    # Verify tokens and grab display info (name/email).
     try:
         account = api_request("GET", "/api/account", config)
         name = account["account"]["last_name"] + account["account"]["first_name"]
-        config["account_id"] = account["account"]["account_id"]
+        config["account_id"] = account["account"].get("account_id", config.get("account_id"))
         config["email"] = account["account"]["email"]
         config["name"] = name
     except SystemExit:
         print("토큰이 유효하지 않습니다. 다시 확인해주세요.")
         sys.exit(1)
-
-    # Get employee info
-    employees = api_request("GET", "/api/company/employee/all", config)
-    for ce in employees.get("companyEmployees", []):
-        if ce["account_id"] == config["account_id"]:
-            config["employee_id"] = ce["employee_id"]
-            config["company_id"] = ce["company_id"]
-            break
 
     save_config(config)
     print(f"\n로그인 성공! 안녕하세요, {name}님")
