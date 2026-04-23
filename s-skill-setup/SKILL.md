@@ -42,16 +42,16 @@ allowed-tools:
 
 설정 파일을 어디에 쓸지 먼저 결정. `AskUserQuestion`:
 
-- 옵션 A: **전역 (추천)** — `~/.claude/.mcp.json`. 어느 프로젝트에서든 동작.
-- 옵션 B: **이 프로젝트만** — 현재 디렉토리 `./.mcp.json`.
+- 옵션 A: **이 프로젝트만 (추천)** — 현재 디렉토리 `./.mcp.json`. 팀이 이 프로젝트를 쓸 때 동일 설정을 공유할 수 있고, 다른 프로젝트에 영향이 없음.
+- 옵션 B: **전역** — `~/.claude/.mcp.json`. 어느 프로젝트에서든 동작.
 
 선택 결과를 `$MCP_PATH` 변수처럼 이후 모든 단계에서 사용.
 
 ```bash
+# 프로젝트 선택 시 (기본 추천)
+MCP_PATH="./.mcp.json"
 # 전역 선택 시
 MCP_PATH="$HOME/.claude/.mcp.json"
-# 프로젝트 선택 시
-MCP_PATH="./.mcp.json"
 ```
 
 ### 2단계. 현재 상태 탐지
