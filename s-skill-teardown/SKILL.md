@@ -2,9 +2,10 @@
 name: s-skill-teardown
 description: |
   s-skills 정리 스킬. Slack 앱/토큰, MCP 설정(Slack/Linear/Notion), Shiftee 로그인,
-  GitHub CLI 로그인 등을 하나씩 물어보면서 선택적으로 제거한다. setup의 반대편.
+  GitHub CLI 로그인, 설치된 스킬 파일 자체까지 하나씩 물어보면서 선택적으로 제거한다.
+  setup의 반대편.
   Use when asked "셋업 지워", "정리", "teardown", "uninstall", "로그아웃", "토큰 폐기",
-  "슬랙 봇 지워", "시프티 로그아웃", or after "이제 안 써".
+  "슬랙 봇 지워", "시프티 로그아웃", "스킬 지워", or after "이제 안 써".
 allowed-tools:
   - Bash
   - Read
@@ -62,6 +63,10 @@ setup과 동일하게 `MCP_PATH` 결정:
 
 # GitHub CLI 로그인 상태
 gh auth status 2>&1 | head -3
+
+# 설치된 s-skill 파일들 (전역/프로젝트 양쪽)
+ls -1 "$HOME/.claude/skills" 2>/dev/null | grep -E '^s-skill-'
+ls -1 ".claude/skills" 2>/dev/null | grep -E '^s-skill-'
 ```
 
 그리고 ToolSearch로 세션에 로드된 MCP 도구들도 확인:
@@ -81,12 +86,13 @@ ToolSearch "+notion"    → Notion MCP
   Notion MCP    : ✅
   Shiftee CLI   : ✅ (로그인됨)
   GitHub CLI    : ✅ (jongbeomlee로 로그인)
+  설치된 스킬   : s-skill-setup, s-skill-shiftee, s-skill-slack, ... (전역)
 ```
 
 ### 3단계. 인터뷰 + 제거 루프
 
-순서: **Shiftee → Slack → Linear → Notion → GitHub**
-(가장 로컬하고 단순한 것부터 → 외부 시스템 연관된 것 순서)
+순서: **Shiftee → Slack → Linear → Notion → GitHub → 스킬 파일**
+(가장 로컬/단순 → 외부 연관 → 마지막에 스킬 파일 자체 철거)
 
 없는 항목은 자동 스킵. 있는 항목만 "지울까요?" 질문.
 
@@ -243,6 +249,58 @@ gh auth logout
 
 ---
 
+### 스킬 파일 제거 (s-skills 자체)
+
+여기까지는 **토큰·설정**만 지웠고, 스킬 **프로그램 파일**(`~/.claude/skills/s-skill-*` 또는 `./.claude/skills/s-skill-*`)은 아직 그대로 남아 있음. 이 단계에서 파일까지 철거한다.
+
+**감지:** 전역/프로젝트 양쪽에서 `s-skill-*` 디렉토리 존재 여부.
+
+```bash
+GLOBAL_SKILLS=$(ls -1 "$HOME/.claude/skills" 2>/dev/null | grep -E '^s-skill-' | tr '\n' ' ')
+LOCAL_SKILLS=$(ls -1 ".claude/skills" 2>/dev/null | grep -E '^s-skill-' | tr '\n' ' ')
+```
+
+둘 다 없으면 이 섹션 전체 스킵.
+
+**Q.** `AskUserQuestion`: "설치된 s-skill 파일을 제거할까요? (재설치 전까지는 슬래시 명령이 사라집니다)"
+- 옵션:
+  - **네, 전역에서 제거** (`~/.claude/skills/`)
+  - **네, 프로젝트에서 제거** (`./.claude/skills/`)
+  - **네, 둘 다 제거**
+  - **아니요, 유지**
+  - **뭐 하는 거예요?**
+
+**"뭐 하는 거예요?"** 면 설명:
+> `npx skills remove`로 설치된 스킬 파일(심볼릭 링크/복사본)을 지웁니다. 이건 로컬 파일만 지우는 거라 GitHub의 원본 레포와는 무관합니다. 나중에 다시 쓰려면 `npx skills add Salesmap-tech/s-skill -s '*' -g` 한 번이면 복원됩니다.
+
+**"네, ..."** 중 하나를 고르면:
+
+1. 해당 scope 플래그(`-g` 또는 없음)로 `npx skills remove`를 대화형으로 실행하도록 **사용자에게 터미널 명령 안내**한다. (Claude Code Bash는 TTY가 아니어서 `skills remove`의 체크박스 UI가 제대로 안 돌 수 있음.)
+
+```
+터미널에서 직접 실행해주세요:
+
+# 전역 스킬 제거 (대화형 선택)
+npx skills remove -g
+
+# 프로젝트 스킬 제거 (대화형 선택)
+npx skills remove
+```
+
+2. 목록을 보여주면서 원치 않는 것만 해제하고 엔터. `s-skill-setup`은 마지막까지 남겨두면 나중에 재설치할 때 편하다는 팁을 같이 안내.
+
+3. 완료 확인 `AskUserQuestion`: "제거 완료하셨나요?" (네 / 아직 / 실패했어요)
+
+4. 검증:
+```bash
+ls -1 "$HOME/.claude/skills" 2>/dev/null | grep -E '^s-skill-' || echo "전역: 없음"
+ls -1 ".claude/skills" 2>/dev/null | grep -E '^s-skill-' || echo "프로젝트: 없음"
+```
+
+**주의:** Shiftee CLI 바이너리(`~/.claude/skills/s-skill-shiftee/shiftee`)는 이 단계에서 디렉토리와 함께 삭제된다. 그래서 **Shiftee 로그아웃(토큰 삭제) 단계를 먼저 처리**한 뒤에 이 단계가 와야 한다 — 이미 순서가 그렇게 돼 있음.
+
+---
+
 ## 4단계. 최종 리포트
 
 ```
@@ -253,12 +311,15 @@ gh auth logout
 - ⏭️ Linear MCP (유지)
 - ⏭️ Notion MCP (유지)
 - ⏭️ GitHub CLI (유지)
+- ✅ 스킬 파일 제거 (전역 4개, 프로젝트 유지)
 
 백업 파일들:
 - ~/.config/shiftee-cli/config.json.bak
 - $MCP_PATH.bak
 
-다시 세팅하고 싶으시면 /s-skill-setup 실행하세요.
+다시 세팅하고 싶으시면:
+  npx skills add Salesmap-tech/s-skill -s '*' -g  # 스킬 재설치
+  /s-skill-setup                                  # 토큰/MCP 재설정
 ```
 
 ---

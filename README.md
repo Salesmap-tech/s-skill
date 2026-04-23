@@ -7,7 +7,7 @@
 | 스킬 | 설명 |
 |------|------|
 | [s-skill-setup](./s-skill-setup) | 설치 후 MCP·gh·Shiftee를 대화형으로 설정해주는 마법사 |
-| [s-skill-teardown](./s-skill-teardown) | setup의 반대 — 항목별로 물어보면서 MCP·토큰·로그인을 선택 제거 |
+| [s-skill-teardown](./s-skill-teardown) | setup의 반대 — 항목별로 물어보면서 MCP·토큰·로그인·스킬 파일을 선택 제거 |
 | [s-skill-linkedin-scrap](./s-skill-linkedin-scrap) | 키워드·인물명으로 링크드인 포스트 검색·수집·저장 |
 | [s-skill-work-log-scrap](./s-skill-work-log-scrap) | GitHub·Linear·Slack 활동을 종합한 활동 요약 리포트 생성 |
 | [s-skill-slack](./s-skill-slack) | Slack MCP 래퍼 — 채널/DM 조회·검색·작성 |
