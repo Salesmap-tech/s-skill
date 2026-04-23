@@ -2,8 +2,8 @@
 name: s-skill-shiftee
 version: 1.0.0
 description: |
-  시프티(Shiftee) 근태/휴가 조회 스킬. 번들된 shiftee CLI를 호출해서 휴가 내역, 출퇴근 기록, 스케줄, 누락 조회,
-  출퇴근 수정 요청 등 근태 관련 질문에 답한다.
+  시프티(Shiftee) 근태/휴가 조회 스킬. 첫 호출 시 shiftee CLI를 자동 다운로드하여 휴가 내역,
+  출퇴근 기록, 스케줄, 누락 조회, 출퇴근 수정 요청 등 근태 관련 질문에 답한다.
   Use when asked about vacation, attendance, leave, schedule, clock-in/out, 휴가, 출퇴근, 근태, 스케줄, 누락, or anything HR/time-tracking related.
 allowed-tools:
   - Bash
@@ -13,17 +13,29 @@ allowed-tools:
 
 # 시프티 근태/휴가 스킬
 
-번들된 `shiftee` CLI를 사용해서 근태, 휴가, 스케줄 관련 질문에 답한다.
+`shiftee` CLI를 사용해서 근태, 휴가, 스케줄 관련 질문에 답한다. 첫 호출 시 GitHub에서 바이너리를 자동으로 캐시한다.
 
-## CLI 위치
+## CLI 부트스트랩 (매 호출 시 가장 먼저)
 
-스킬 디렉토리 안에 `shiftee` 스크립트가 번들로 포함되어 있다. 설치 경로에 따라 아래 중 하나:
+`shiftee` 바이너리가 캐시되어 있는지 확인하고, 없으면 GitHub에서 한 번 받아 `~/.cache/s-skill-shiftee/shiftee`에 저장한다. 이후 모든 명령은 `$SHIFTEE` 변수로 호출한다.
 
 ```bash
-# 전역 설치
-SHIFTEE=~/.claude/skills/s-skill-shiftee/shiftee
-# 프로젝트 설치
-SHIFTEE=./.claude/skills/s-skill-shiftee/shiftee
+SHIFTEE=""
+for p in \
+  "$HOME/.cache/s-skill-shiftee/shiftee" \
+  "$HOME/.claude/skills/s-skill-shiftee/shiftee" \
+  "./.claude/skills/s-skill-shiftee/shiftee" \
+  "$HOME/.agents/skills/s-skill-shiftee/shiftee"; do
+  if [ -x "$p" ]; then SHIFTEE="$p"; break; fi
+done
+
+if [ -z "$SHIFTEE" ]; then
+  mkdir -p "$HOME/.cache/s-skill-shiftee"
+  SHIFTEE="$HOME/.cache/s-skill-shiftee/shiftee"
+  curl -fsSL https://raw.githubusercontent.com/Salesmap-tech/s-skill/main/bin/shiftee \
+       -o "$SHIFTEE" || { echo "shiftee 다운로드 실패 — 네트워크/방화벽 확인"; exit 1; }
+  chmod +x "$SHIFTEE"
+fi
 ```
 
 스킬을 처음 사용하기 전에 한 번 로그인이 필요하다:
@@ -88,21 +100,6 @@ $SHIFTEE fix clock-in 2026-04-15 09:30
 $SHIFTEE fix clock-out 2026-04-15 18:00
 $SHIFTEE fix create 2026-04-15 09:30 --time2 18:00 -n "사유"
 ```
-
-## CLI 경로 자동 탐지
-
-실제 실행 전, 아래 순서로 스크립트 위치를 찾는다:
-
-```bash
-for p in \
-  "$HOME/.claude/skills/s-skill-shiftee/shiftee" \
-  "./.claude/skills/s-skill-shiftee/shiftee" \
-  "$(which shiftee 2>/dev/null)"; do
-  [ -x "$p" ] && SHIFTEE="$p" && break
-done
-```
-
-하나도 찾지 못하면 `/s-skill-setup` 실행을 안내한다.
 
 ## 응답 가이드
 

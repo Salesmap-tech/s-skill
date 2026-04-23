@@ -65,9 +65,16 @@ which gh >/dev/null 2>&1 && gh auth status 2>&1 | head -3
 # 대상 .mcp.json 존재 및 서버 목록
 [ -f "$MCP_PATH" ] && cat "$MCP_PATH" | jq '.mcpServers | keys' 2>/dev/null
 
-# Shiftee CLI 번들 + 로그인 상태
-SHIFTEE_BIN="$HOME/.claude/skills/s-skill-shiftee/shiftee"
-[ -x "$SHIFTEE_BIN" ] && echo "shiftee bundled"
+# Shiftee CLI 바이너리 탐색 (캐시 → 전역 스킬 → 프로젝트 스킬 → Universal)
+SHIFTEE_BIN=""
+for p in \
+  "$HOME/.cache/s-skill-shiftee/shiftee" \
+  "$HOME/.claude/skills/s-skill-shiftee/shiftee" \
+  "./.claude/skills/s-skill-shiftee/shiftee" \
+  "$HOME/.agents/skills/s-skill-shiftee/shiftee"; do
+  if [ -x "$p" ]; then SHIFTEE_BIN="$p"; break; fi
+done
+[ -n "$SHIFTEE_BIN" ] && echo "shiftee found at $SHIFTEE_BIN"
 [ -f "$HOME/.config/shiftee-cli/config.json" ] && echo "shiftee logged in"
 ```
 
@@ -87,7 +94,7 @@ ToolSearch "+notion"    → Notion MCP 도구 있는지
   Linear MCP   : ✅ 연결됨 / ❌ 미설정
   Slack MCP    : ✅ 연결됨 / ❌ 미설정
   Notion MCP   : ✅ 연결됨 / ❌ 미설정
-  Shiftee CLI  : ✅ 로그인됨 / ⚠️ 번들은 있지만 로그인 안 됨 / ❌ 스킬 미설치
+  Shiftee CLI  : ✅ 로그인됨 / ⚠️ 번들은 있지만 로그인 안 됨 / ❌ 바이너리 없음 (자동 다운로드 시도 예정)
 ```
 
 ### 3단계. 인터뷰 + 설치 루프
@@ -306,15 +313,32 @@ Claude Code를 재시작해주세요. 재시작 후에 Slack MCP가 도구 목�
 
 **Y면:**
 
-1. 번들 확인:
+1. 바이너리 확보 (4곳 탐색 → 없으면 GitHub에서 자동 다운로드):
    ```bash
-   SHIFTEE_BIN="$HOME/.claude/skills/s-skill-shiftee/shiftee"
-   [ -x "$SHIFTEE_BIN" ] || chmod +x "$SHIFTEE_BIN" 2>/dev/null
+   SHIFTEE_BIN=""
+   for p in \
+     "$HOME/.cache/s-skill-shiftee/shiftee" \
+     "$HOME/.claude/skills/s-skill-shiftee/shiftee" \
+     "./.claude/skills/s-skill-shiftee/shiftee" \
+     "$HOME/.agents/skills/s-skill-shiftee/shiftee"; do
+     if [ -x "$p" ]; then SHIFTEE_BIN="$p"; break; fi
+   done
+
+   if [ -z "$SHIFTEE_BIN" ]; then
+     mkdir -p "$HOME/.cache/s-skill-shiftee"
+     SHIFTEE_BIN="$HOME/.cache/s-skill-shiftee/shiftee"
+     curl -fsSL https://raw.githubusercontent.com/Salesmap-tech/s-skill/main/bin/shiftee \
+          -o "$SHIFTEE_BIN" && chmod +x "$SHIFTEE_BIN"
+   fi
    ```
-   `s-skill-shiftee` 스킬이 설치 안 된 경우:
+   `curl`까지 실패한 경우(오프라인/방화벽):
    ```
-   s-skill-shiftee 스킬이 먼저 설치되어야 합니다.
-   README의 설치법 참고해서 스킬을 설치한 뒤 다시 /s-skill-setup을 실행해주세요.
+   shiftee 바이너리를 받지 못했어요. 네트워크를 확인하거나 아래 수동 명령을 써주세요:
+
+   git clone https://github.com/Salesmap-tech/s-skill.git /tmp/s-skill
+   mkdir -p ~/.cache/s-skill-shiftee
+   cp /tmp/s-skill/bin/shiftee ~/.cache/s-skill-shiftee/shiftee
+   chmod +x ~/.cache/s-skill-shiftee/shiftee
    ```
    → 이 분기 스킵.
 
@@ -328,7 +352,7 @@ Claude Code를 재시작해주세요. 재시작 후에 Slack MCP가 도구 목�
    ```
    Shiftee 로그인을 진행할게요. 아래 명령을 터미널에서 직접 실행해주세요:
 
-   ~/.claude/skills/s-skill-shiftee/shiftee login
+   $SHIFTEE_BIN login
 
    이메일과 비밀번호를 물어봅니다. 입력 후 토큰이 ~/.config/shiftee-cli/config.json 에 저장돼요.
    완료하셨나요?
@@ -352,7 +376,7 @@ Claude Code를 재시작해주세요. 재시작 후에 Slack MCP가 도구 목�
 | Linear | `mcp__linear-server__list_projects` (limit 1) |
 | Slack | `mcp__slack__channels_list` (limit 1) |
 | Notion | `mcp__notion__...search` (query "test") |
-| Shiftee | `~/.claude/skills/s-skill-shiftee/shiftee me` |
+| Shiftee | `$SHIFTEE_BIN me` (1단계에서 탐지한 경로) |
 
 하나라도 실패하면:
 - 에러 메시지 출력

@@ -45,7 +45,14 @@ cp -r s-skill/s-skill-linkedin-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-work-log-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-slack ~/.claude/skills/
 cp -r s-skill/s-skill-shiftee ~/.claude/skills/
-chmod +x ~/.claude/skills/s-skill-shiftee/shiftee
+```
+
+Shiftee CLI 바이너리는 스킬 첫 호출 시 자동으로 내려받습니다 (`~/.cache/s-skill-shiftee/shiftee`). 오프라인 환경이라면 수동으로 미리 복사해두세요:
+
+```bash
+mkdir -p ~/.cache/s-skill-shiftee
+cp s-skill/bin/shiftee ~/.cache/s-skill-shiftee/shiftee
+chmod +x ~/.cache/s-skill-shiftee/shiftee
 ```
 
 ## 사전 준비

@@ -116,12 +116,14 @@ ToolSearch "+notion"    → Notion MCP
 ```bash
 cp ~/.config/shiftee-cli/config.json ~/.config/shiftee-cli/config.json.bak
 rm ~/.config/shiftee-cli/config.json
+# 자동 다운로드된 캐시 바이너리도 정리
+rm -rf ~/.cache/s-skill-shiftee
 ```
 검증: `[ ! -f ~/.config/shiftee-cli/config.json ] && echo "삭제 완료"`
 
 결과:
 ```
-✅ Shiftee 로그아웃 완료. 백업은 ~/.config/shiftee-cli/config.json.bak 에 남겨뒀어요.
+✅ Shiftee 로그아웃 완료 + 캐시 정리. 백업은 ~/.config/shiftee-cli/config.json.bak 에 남겨뒀어요.
 ```
 
 ---
@@ -297,7 +299,7 @@ ls -1 "$HOME/.claude/skills" 2>/dev/null | grep -E '^s-skill-' || echo "전역: 
 ls -1 ".claude/skills" 2>/dev/null | grep -E '^s-skill-' || echo "프로젝트: 없음"
 ```
 
-**주의:** Shiftee CLI 바이너리(`~/.claude/skills/s-skill-shiftee/shiftee`)는 이 단계에서 디렉토리와 함께 삭제된다. 그래서 **Shiftee 로그아웃(토큰 삭제) 단계를 먼저 처리**한 뒤에 이 단계가 와야 한다 — 이미 순서가 그렇게 돼 있음.
+**주의:** Shiftee CLI 바이너리는 이제 `~/.cache/s-skill-shiftee/shiftee`에 자동 캐시되며, 위 "Shiftee 로그아웃" 단계에서 해당 캐시도 같이 지워진다. 그래서 **Shiftee 로그아웃 단계를 먼저 처리**한 뒤에 이 단계가 와야 한다 — 이미 순서가 그렇게 돼 있음.
 
 ---
 
