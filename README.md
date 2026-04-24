@@ -19,16 +19,16 @@
 
 아래 명령을 실행하면 **6개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
 
-**A. 전역 설치** — 어떤 프로젝트에서든 사용 가능 (`~/.claude/skills/`)
-
-```bash
-npx --yes skills add Salesmap-tech/s-skill -s '*' -g
-```
-
-**B. 현재 프로젝트에만 설치** — 이 레포에서만 사용 (`./.claude/skills/`)
+**A. 현재 프로젝트에만 설치 (권장)** — 이 레포에서만 사용 (`./.claude/skills/`)
 
 ```bash
 npx --yes skills add Salesmap-tech/s-skill -s '*'
+```
+
+**B. 전역 설치** — 어떤 프로젝트에서든 사용 가능 (`~/.claude/skills/`)
+
+```bash
+npx --yes skills add Salesmap-tech/s-skill -s '*' -g
 ```
 
 에이전트 선택 화면에서 스페이스로 토글, 엔터로 확정. Claude Code만 쓴다면 그냥 엔터.
