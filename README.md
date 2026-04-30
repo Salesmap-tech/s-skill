@@ -149,12 +149,10 @@ gh auth login
 
 ## 기여
 
-새 스킬을 추가하려면:
+기여 가이드(스킬 추가 절차, SKILL.md frontmatter 표준, 로컬 symlink 개발법, PR 리뷰 기준)는 [`CONTRIBUTING.md`](./CONTRIBUTING.md) 참고. 변경 이력은 [`CHANGELOG.md`](./CHANGELOG.md).
 
-1. 루트에 스킬 이름으로 폴더 생성 (예: `my-skill/`)
-2. 폴더 안에 `SKILL.md` 작성 (frontmatter 포함)
-3. 이 README의 스킬 테이블에 추가
-4. PR
+- 버그 리포트: [이슈 만들기](https://github.com/Salesmap-tech/s-skill/issues/new?template=bug_report.md)
+- 새 스킬 제안: [이슈 만들기](https://github.com/Salesmap-tech/s-skill/issues/new?template=skill_proposal.md)
 
 ## 라이선스
 

@@ -1,0 +1,22 @@
+{
+  "_comment": "이 파일을 .mcp.json (프로젝트) 또는 ~/.claude/.mcp.json (전역)으로 복사해서 사용하세요. Slack 토큰만 직접 발급해 채우면 됩니다. 처음이시라면 /s-skill-setup 마법사가 더 편합니다.",
+  "mcpServers": {
+    "linear-server": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
+    },
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "slack": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "slack-mcp-server"],
+      "env": {
+        "SLACK_MCP_XOXP_TOKEN": "xoxp-여기에-User-OAuth-Token-붙여넣기",
+        "SLACK_MCP_ADD_MESSAGE_TOOL": "true"
+      }
+    }
+  }
+}
