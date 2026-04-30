@@ -1,6 +1,6 @@
 # 기여 가이드
 
-s-skills에 새 스킬을 추가하거나 기존 스킬을 개선하는 분들을 환영합니다. 사내 활용이 1차 목적이지만 외부 fork도 자유롭게 가능합니다.
+s-skills에 새 스킬을 추가하거나 기존 스킬을 개선하는 분들을 환영합니다. 사내 활용이 1차 목적이며, 외부 사용/배포는 [`README.md`의 라이선스 섹션](./README.md#라이선스)을 따릅니다.
 
 ## 새 스킬 추가 절차
 
@@ -47,7 +47,14 @@ git clone https://github.com/Salesmap-tech/s-skill.git ~/dev/s-skill
 mkdir -p ~/.claude/skills
 
 for dir in ~/dev/s-skill/s-skill-*; do
-  ln -sfn "$dir" ~/.claude/skills/"$(basename "$dir")"
+  name="$(basename "$dir")"
+  target="$HOME/.claude/skills/$name"
+  # 기존이 일반 디렉토리/파일이면 중첩 symlink 방지를 위해 건너뛰고 사용자가 직접 정리하도록
+  if [ -e "$target" ] && [ ! -L "$target" ]; then
+    echo "skip: $target 이 일반 파일/디렉토리로 존재합니다. 직접 제거 후 다시 실행하세요." >&2
+    continue
+  fi
+  ln -sfn "$dir" "$target"
 done
 ```
 
