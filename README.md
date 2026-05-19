@@ -12,6 +12,7 @@
 | [s-skill-work-log-scrap](./s-skill-work-log-scrap) | GitHub·Linear·Slack 활동을 종합한 활동 요약 리포트 생성 |
 | [s-skill-slack](./s-skill-slack) | Slack MCP 래퍼 — 채널/DM 조회·검색·작성 |
 | [s-skill-shiftee](./s-skill-shiftee) | 번들된 shiftee CLI로 근태·휴가·스케줄 조회 및 출퇴근 수정 |
+| [s-skill-work-playlist](./s-skill-work-playlist) | 1시간 분량의 무작위 작업용 음악 플레이리스트 + YouTube 한 번에 듣기 링크 생성 |
 
 ## 설치
 
@@ -45,6 +46,7 @@ cp -r s-skill/s-skill-linkedin-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-work-log-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-slack ~/.claude/skills/
 cp -r s-skill/s-skill-shiftee ~/.claude/skills/
+cp -r s-skill/s-skill-work-playlist ~/.claude/skills/
 ```
 
 Shiftee CLI 바이너리는 스킬 첫 호출 시 자동으로 내려받습니다 (`~/.cache/s-skill-shiftee/shiftee`). 오프라인 환경이라면 수동으로 미리 복사해두세요:
