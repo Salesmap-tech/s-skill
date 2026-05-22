@@ -13,12 +13,13 @@
 | [s-skill-slack](./s-skill-slack) | Slack MCP 래퍼 — 채널/DM 조회·검색·작성 |
 | [s-skill-shiftee](./s-skill-shiftee) | 번들된 shiftee CLI로 근태·휴가·스케줄 조회 및 출퇴근 수정 |
 | [s-skill-interview-to-ticket](./s-skill-interview-to-ticket) | 고객 인터뷰 피드백을 세일즈맵 CRM 티켓으로 생성 |
+| [s-skill-ui-writing](./s-skill-ui-writing) | SMWS 기준 UI 문구 작성 및 검토 |
 
 ## 설치
 
 ### 방법 1. `skills` CLI 사용 (권장)
 
-아래 명령을 실행하면 **7개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
+아래 명령을 실행하면 **8개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
 
 **A. 현재 프로젝트에만 설치 (권장)** — 이 레포에서만 사용 (`./.claude/skills/`)
 
@@ -47,6 +48,7 @@ cp -r s-skill/s-skill-work-log-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-slack ~/.claude/skills/
 cp -r s-skill/s-skill-shiftee ~/.claude/skills/
 cp -r s-skill/s-skill-interview-to-ticket ~/.claude/skills/
+cp -r s-skill/s-skill-ui-writing ~/.claude/skills/
 ```
 
 Shiftee CLI 바이너리는 스킬 첫 호출 시 자동으로 내려받습니다 (`~/.cache/s-skill-shiftee/shiftee`). 오프라인 환경이라면 수동으로 미리 복사해두세요:
@@ -154,6 +156,7 @@ export SALESMAP_API_TOKEN="여기에-본인-토큰"
 /s-skill-slack [자연어 요청]
 /s-skill-shiftee [자연어 요청]
 /s-skill-interview-to-ticket [Notion URL, Linear URL, 또는 인터뷰 내용]
+/s-skill-ui-writing [작성: 컴포넌트 유형 + 상황] 또는 [검토: 기존 문구]
 ```
 
 정리가 필요하면 `/s-skill-teardown` — 항목별로 물어보면서 선택적으로 제거합니다.
