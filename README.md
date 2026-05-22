@@ -12,12 +12,13 @@
 | [s-skill-work-log-scrap](./s-skill-work-log-scrap) | GitHub·Linear·Slack 활동을 종합한 활동 요약 리포트 생성 |
 | [s-skill-slack](./s-skill-slack) | Slack MCP 래퍼 — 채널/DM 조회·검색·작성 |
 | [s-skill-shiftee](./s-skill-shiftee) | 번들된 shiftee CLI로 근태·휴가·스케줄 조회 및 출퇴근 수정 |
+| [s-skill-interview-to-ticket](./s-skill-interview-to-ticket) | 고객 인터뷰 피드백을 세일즈맵 CRM 티켓으로 생성 |
 
 ## 설치
 
 ### 방법 1. `skills` CLI 사용 (권장)
 
-아래 명령을 실행하면 **6개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
+아래 명령을 실행하면 **7개 스킬이 전부 자동 선택**되고, **설치할 에이전트만 대화형으로 물어봅니다** (Claude Code 기본 체크). 설치 범위만 둘 중 하나로 고르세요.
 
 **A. 현재 프로젝트에만 설치 (권장)** — 이 레포에서만 사용 (`./.claude/skills/`)
 
@@ -45,6 +46,7 @@ cp -r s-skill/s-skill-linkedin-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-work-log-scrap ~/.claude/skills/
 cp -r s-skill/s-skill-slack ~/.claude/skills/
 cp -r s-skill/s-skill-shiftee ~/.claude/skills/
+cp -r s-skill/s-skill-interview-to-ticket ~/.claude/skills/
 ```
 
 Shiftee CLI 바이너리는 스킬 첫 호출 시 자동으로 내려받습니다 (`~/.cache/s-skill-shiftee/shiftee`). 오프라인 환경이라면 수동으로 미리 복사해두세요:
@@ -116,7 +118,17 @@ gh auth login
 
 로그인 시 최소 스코프: `repo`, `read:org`. 기본 옵션으로 진행하면 됩니다.
 
-### 3. Shiftee CLI 로그인 (선택)
+### 3. Salesmap API 토큰 (선택)
+
+`s-skill-interview-to-ticket` 스킬을 쓰려면 세일즈맵 API 토큰이 필요합니다. 토큰을 `~/.zshrc`(또는 `~/.bashrc`)에 환경변수로 등록하세요.
+
+```bash
+export SALESMAP_API_TOKEN="여기에-본인-토큰"
+```
+
+등록 후 셸을 재시작하거나 `source ~/.zshrc`를 실행합니다.
+
+### 4. Shiftee CLI 로그인 (선택)
 
 `s-skill-shiftee` 스킬을 쓰려면 설치 후 한 번 로그인하면 됩니다. 바이너리는 첫 호출 시 `~/.cache/s-skill-shiftee/shiftee`로 자동 다운로드되니, 그 경로를 바로 쓰시면 됩니다.
 
@@ -141,6 +153,7 @@ gh auth login
 /s-skill-work-log-scrap [기간]
 /s-skill-slack [자연어 요청]
 /s-skill-shiftee [자연어 요청]
+/s-skill-interview-to-ticket [Notion URL, Linear URL, 또는 인터뷰 내용]
 ```
 
 정리가 필요하면 `/s-skill-teardown` — 항목별로 물어보면서 선택적으로 제거합니다.
