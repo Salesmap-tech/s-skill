@@ -114,16 +114,17 @@ def api_request(method, path, config, body=None, _retry=True):
                              account_token=config.get("account_token"),
                              employee_token=config.get("employee_token"),
                              body=body)
-    # 토큰 만료(401) 시 저장된 비밀번호로 자동 재로그인 후 1회 재시도
-    if status == 401 and _retry and config.get("email") and config.get("password"):
-        try:
-            tokens = do_login(config["email"], config["password"], config.get("employee_id"))
-        except RuntimeError as e:
-            print(f"자동 재로그인 실패: {e}")
-            sys.exit(1)
-        config.update(tokens)
-        save_config(config)
-        return api_request(method, path, config, body, _retry=False)
+    # employee 토큰 만료(401) 시 장수명 account 토큰으로 employee 토큰만 재발급 후 1회 재시도
+    # (account 토큰은 ~5년, employee 토큰은 ~1년 — 비밀번호 없이 갱신 가능)
+    if status == 401 and _retry and config.get("account_token") and config.get("employee_id"):
+        st, body2 = _raw_call("GET", f"/api/company/employee/auth?employee_id={config['employee_id']}",
+                              account_token=config["account_token"])
+        if st == 200:
+            config["employee_token"] = json.loads(body2)["employee_auth_token"]
+            save_config(config)
+            return api_request(method, path, config, body, _retry=False)
+        print("인증이 만료되었습니다. 'shiftee login'으로 다시 로그인하세요.")
+        sys.exit(1)
     if status >= 400:
         print(f"API 오류 ({status}): {text[:300]}")
         sys.exit(1)
@@ -191,7 +192,7 @@ def cmd_login(args):
     config = dict(existing)
     config.update(tokens)
     config["email"] = email
-    config["password"] = password  # 토큰 만료 시 자동 재로그인을 위해 평문 저장
+    config.pop("password", None)  # 비밀번호는 저장하지 않음 (토큰만으로 충분, 만료 시 account 토큰으로 재발급)
 
     # 표시용 이름 조회
     try:
@@ -207,7 +208,7 @@ def cmd_login(args):
     print(f"  직원 ID: {config.get('employee_id', '?')}")
     print(f"  회사 ID: {config.get('company_id', '?')}")
     print(f"\n설정 저장: {CONFIG_FILE}")
-    print("  (비밀번호가 평문으로 저장됩니다. 파일 권한은 600)")
+    print("  (비밀번호는 저장하지 않습니다. 파일 권한은 600)")
 
 
 def cmd_me(args):

@@ -138,13 +138,13 @@ export SALESMAP_API_TOKEN="여기에-본인-토큰"
 ~/.cache/s-skill-shiftee/shiftee login
 ```
 
-로그인 방식은 **브라우저 쿠키 토큰 복사**입니다 (이메일/비밀번호 아님):
+로그인 방식은 **이메일/비밀번호**입니다 (쿠키 복사 아님):
 
-1. https://shiftee.io 에 로그인한 브라우저 탭에서 F12 → Application(Storage) → Cookies → `https://shiftee.io`
-2. `shiftee_account_auth_token` 값을 프롬프트에 붙여넣기
-3. `shiftee_employee_auth_token` 값도 붙여넣기
+1. 이메일 입력
+2. 비밀번호 입력 (화면에 표시되지 않음)
+3. CLI가 account 토큰 → 직원 정보 → employee 토큰을 자동 발급 (여러 회사 소속이면 번호로 선택)
 
-토큰은 `~/.config/shiftee-cli/config.json`(0600)에 저장되고, 이후 모든 `s-skill-shiftee` 호출이 자동 인증됩니다. 토큰 `expires_at`이 지나면 쿠키를 다시 복사해 재로그인해야 합니다.
+토큰·계정 정보는 `~/.config/shiftee-cli/config.json`(0600)에 저장되고, 이후 모든 `s-skill-shiftee` 호출이 자동 인증됩니다. 비밀번호는 저장하지 않습니다(로그인 시에만 사용). 토큰 수명이 길어(account ~5년, employee ~1년) 보통 한 번만 로그인하면 되고, employee 토큰이 만료돼도 account 토큰으로 자동 갱신됩니다.
 
 ## 사용법
 

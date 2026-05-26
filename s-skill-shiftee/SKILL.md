@@ -38,20 +38,19 @@ if [ -z "$SHIFTEE" ]; then
 fi
 ```
 
-스킬을 처음 사용하기 전에 한 번 로그인이 필요하다:
+스킬을 처음 사용하기 전에 한 번 로그인이 필요하다. 로그인 방식은 **이메일/비밀번호**다 (쿠키 붙여넣기 아님):
 
 ```bash
 $SHIFTEE login
 ```
 
-로그인 방식은 **브라우저 쿠키 토큰 붙여넣기**다 (이메일/비밀번호 아님):
+1. 이메일 입력
+2. 비밀번호 입력 (`getpass` — 화면에 표시되지 않음)
+3. CLI가 account 토큰 → employee_id → employee 토큰을 자동 발급한다. 여러 회사/직원에 소속된 경우 번호로 선택한다.
 
-1. 브라우저로 https://shiftee.io 로그인
-2. F12 → Application(Storage) 탭 → Cookies → `https://shiftee.io`
-3. `shiftee_account_auth_token` 값을 복사해 프롬프트에 붙여넣기
-4. `shiftee_employee_auth_token` 값도 복사해 붙여넣기
+로그인은 대화형 입력(`input`/`getpass`)을 받으므로 Claude가 Bash 도구로 대신 입력할 수 없다. **사용자가 직접 실행하도록 안내한다** — 프롬프트에 `!$SHIFTEE login`을 입력하거나 터미널에서 직접 실행하면 된다.
 
-토큰은 `~/.config/shiftee-cli/config.json` (0600)에 저장된다. 토큰에는 `expires_at`이 있어 만료되면 쿠키를 다시 복사해야 한다.
+토큰·이메일·계정 정보는 `~/.config/shiftee-cli/config.json` (0600)에 저장된다. **비밀번호는 저장하지 않는다** — 로그인 POST에만 일회성으로 쓰인다. account 토큰은 약 5년, employee 토큰은 약 1년 유효하고, employee 토큰이 만료돼 401이 나면 장수명 account 토큰으로 employee 토큰만 자동 재발급하므로 보통은 한 번만 로그인하면 된다. account 토큰까지 만료되면 `$SHIFTEE login`을 다시 실행한다.
 
 ## 사용 가능한 명령어
 
@@ -114,6 +113,6 @@ $SHIFTEE fix create 2026-04-15 09:30 --time2 18:00 -n "사유"
 - 휴가 기록은 날짜, 유형(연차/반차/병가 등), 사유를 표 형태로 정리한다.
 - 출퇴근 기록도 날짜별로 깔끔하게 정리한다.
 - **`fix` 명령은 실제 수정 요청을 보내므로, 실행 전 반드시 사용자 확인을 받는다.** `AskUserQuestion`으로 최종 승인 후 실행.
-- `login` 안 되어있어 "설정 파일이 없습니다" 에러가 나면 `$SHIFTEE login` 실행 안내.
+- "설정 파일이 없습니다" 에러가 나면 아직 로그인 전이다. 대화형 로그인이므로 사용자에게 `!$SHIFTEE login`을 직접 실행하라고 안내한다 (Claude가 비밀번호를 대신 입력할 수 없음).
 
 $ARGUMENTS
