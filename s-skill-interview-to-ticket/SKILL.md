@@ -1,6 +1,6 @@
 ---
 name: s-skill-interview-to-ticket
-version: 1.0.0
+version: 1.1.0
 description: |
   인터뷰 피드백에서 SAL(Engineering) 팀 티켓 초안을 작성할 때 사용. "인터뷰 티켓", "피드백 티켓", "SAL 티켓 만들어" 등의 요청 시 자동 호출.
 allowed-tools:
@@ -83,39 +83,79 @@ allowed-tools:
 
 #### 4-1. 티켓 타입 확인
 
-- **CRM 티켓** -> Definition ID: `019abebf-887c-755f-b526-2567e2476fde`
-- **SDR 티켓** -> Definition ID: `019e3dbe-f9e0-7000-80c2-001c51ebb091`
+| 타입 | Definition ID |
+|------|--------------|
+| **CRM 티켓** | `019abebf-887c-755f-b526-2567e2476fde` |
+| **SDR 티켓** | `019e3dbe-f9e0-7000-80c2-001c51ebb091` |
 
 사용자가 명시하지 않으면 질문한다. 대부분의 경우 CRM 티켓이다.
 
-#### 4-2. 필드 정의 조회
+#### 4-2. API 인증
 
-해당 커스텀 오브젝트의 필드 정의를 조회하여 사용 가능한 필드와 옵션을 파악한다:
+> **중요**: 환경변수 `$SALESMAP_API_TOKEN`이 Bash 세션에서 로드되지 않을 수 있다.
+> 실패 시 `~/.zshrc`에서 토큰 값을 직접 읽어서 사용한다.
 
+```bash
+# 환경변수 먼저 시도, 실패 시 zshrc에서 추출
+TOKEN=${SALESMAP_API_TOKEN:-$(grep SALESMAP_API_TOKEN ~/.zshrc | sed 's/.*"\(.*\)"/\1/')}
 ```
-GET /v2/field/custom-object?customObjectDefinitionId={definitionId}
-```
 
-- 선택형 필드는 등록된 옵션 값만 사용 가능하므로 반드시 확인
-- 관계형 필드(고객, 회사, 딜 등)는 UUID가 필요하므로, 연결할 대상이 있으면 검색하여 ID를 확보
+#### 4-3. 커스텀 오브젝트 생성 — 검증된 필드 ID 매핑
 
-#### 4-3. 커스텀 오브젝트 생성
+> **중요**: 필드 정의 API(`GET /v2/field/custom-object`)는 모든 커스텀 오브젝트의 필드를 섞어서 반환한다.
+> 동일 이름 필드가 여러 개 나오므로 **반드시 아래 검증된 필드 ID를 사용**한다.
+> 필드 정의 API를 호출하여 필드를 탐색하지 않는다.
 
-**제목**을 `name`에 넣어 생성한다:
+##### CRM 티켓 필드 ID
 
-```
-POST https://salesmap.kr/api/v2/custom-object
-Authorization: Bearer $SALESMAP_API_TOKEN
-Content-Type: application/json
+| 필드명 | 필드 ID | 타입 | 비고 |
+|--------|---------|------|------|
+| 티켓(CRM) 이름 | `35f19e7e-039f-40d1-912e-da8b93a329ef` | string | **대표 필드 — 반드시 포함** |
+| 소스 | `d1ae8285-8b1b-4494-a89d-f1f113af04a0` | multiSelect | 옵션: VOC, 인터뷰, 정량 지표, 기타 |
+| 이슈 유형 | `815c9050-3d43-4261-a3d3-225e5dc7ee1c` | singleSelect | 옵션: Regular Track, Fast Track, Quick Win Track |
+| 기능 카테고리 | `bd9561e3-fab6-4fe6-b610-798d9542d11a` | multiSelect | 아래 옵션 목록 참조 |
+| 제보 일자 | `1930963f-eaf5-4d29-a2a8-9676187665e6` | date | 미검증 — 실패 시 스킵 |
+| 담당자 | 미확정 | user | 미검증 — 실패 시 스킵 |
+| 요청사 | `6cf84776-146a-4b9e-bd1e-2e9f2dcbc5e9` | multiOrganization | 미검증 — 실패 시 스킵 |
+| 요청자 | `e59cd00d-17d2-4e68-bb1b-3a90f3c1e86e` | multiPeople | 미검증 — 실패 시 스킵 |
 
+##### SDR 티켓 필드 ID
+
+> SDR 티켓은 CRM 티켓과 필드 ID가 다르다. 아래는 추정이며, 첫 사용 시 필드 정의 API로 검증 필요.
+
+| 필드명 | 필드 ID | 타입 | 비고 |
+|--------|---------|------|------|
+| 티켓(SDR) 이름 | `019e3dbe-f9f3-7000-80c2-09141ab99ffe` | string | **대표 필드 — 반드시 포함** |
+| 소스 | `ad7b5383-af11-46f5-a313-33e5b920a3e1` | multiSelect | 추정 — 첫 사용 시 검증 |
+| 이슈 유형 | `6f89d747-5ea5-4c5d-abbf-d966d4de7aae` | singleSelect | 추정 — 첫 사용 시 검증 |
+| 기능 카테고리 | `13a23b63-f036-4656-8893-cafafe961b9b` | multiSelect | 추정 — 첫 사용 시 검증 |
+
+SDR 티켓 필드 ID가 검증되면 이 표를 업데이트할 것.
+
+##### 기능 카테고리 옵션 (CRM 티켓 기준, SDR도 동일 옵션명)
+
+노트, 검색, 다국어, 데이터 업로드, 데이터 필드 관리, 레이아웃, 목록/파이프라인, 마케팅 이메일, 문서, 미리보기, 미팅, 병합, 뷰(필터/정렬/컬럼), 사용자 관리, 상세 페이지, 상품/견적서, 시퀀스, 알림, 에디터, 연동, 워크플로우, 웹 폼, 이메일, 차트/대시보드, 커스텀 오브젝트, AI, UX/UI, API/웹훅, TODO/캘린더, 타임라인/히스토리, SMS/알림톡, 전체 선택, 권한, 기타, 그룹, 모바일
+
+##### 요청 형식
+
+```json
 {
   "customObjectDefinitionId": "{definitionId}",
   "name": "[기능영역] 핵심 문제 요약",
   "fieldList": [
-    // 4-2에서 확인한 필드 정의에 맞춰 구성
+    {"id": "{대표필드ID}", "name": "{대표필드명}", "stringValue": "[기능영역] 핵심 문제 요약"},
+    {"id": "{소스ID}", "name": "소스", "stringValueList": ["인터뷰"]},
+    {"id": "{이슈유형ID}", "name": "이슈 유형", "stringValue": "Regular Track"},
+    {"id": "{기능카테고리ID}", "name": "기능 카테고리", "stringValueList": ["목록/파이프라인"]}
   ]
 }
 ```
+
+**핵심 규칙:**
+- `fieldList`에 **대표 필드**(티켓 이름)를 반드시 포함해야 한다. 누락 시 "대표 필드를 입력해 주세요" 오류 발생.
+- `name` (최상위)과 대표 필드의 `stringValue`에 동일한 제목을 넣는다.
+- multiSelect -> `stringValueList` (배열), singleSelect -> `stringValue` (문자열), user -> `userValueId`, date -> `dateValue`
+- 필드 ID를 반드시 함께 전달한다. 이름만으로는 중복 필드 구분이 안 된다.
 
 #### 4-4. 요청사/요청자 연결
 
@@ -128,7 +168,7 @@ Content-Type: application/json
    - `POST /v2/object/people/search`로 담당자명 검색하여 UUID 확보
    - `{ "name": "요청자", "peopleValueIdList": ["<PEOPLE_UUID>"] }`로 설정
 3. 검색 결과가 여러 건이면 사용자에게 확인
-4. 검색 결과가 없으면 스킵 (연결 없이 진행)
+4. 검색 API 형식 오류 시 스킵하고 사용자에게 수동 연결 안내 (API 스키마 미확정)
 
 #### 4-5. 노트(메모)로 상세 내용 작성
 
@@ -164,12 +204,6 @@ POST https://salesmap.kr/api/v2/custom-object/{생성된 티켓 ID}
 - 성공 시: 생성된 티켓 ID와 이름을 출력
 - 실패 시: 에러 메시지를 보여주고 원인 분석 후 재시도 여부를 묻는다
 
-**주의사항:**
-- 필드 이름은 CRM에 등록된 한글 이름과 **정확히 일치**해야 한다
-- 4-2에서 조회한 필드 정의 기준으로만 fieldList를 구성한다 (임의 필드명 금지)
-- 선택형 필드는 등록된 옵션 값만 사용
-- API 호출 전 사용자에게 요청 body를 보여주고 확인받는다
-
 ## 주의사항
 
 - 문제가 확인된 사실인지, 고객 제보인지 구분하여 서술 톤을 맞춘다
@@ -179,5 +213,6 @@ POST https://salesmap.kr/api/v2/custom-object/{생성된 티켓 ID}
 - 주관적 온도를 사용자가 제공하지 않으면 반드시 질문 (임의로 채우지 않음)
 - CRM API 호출 시 rate limit 준수 (0.1~0.15초 간격)
 - 여러 티켓을 한번에 생성할 때는 하나씩 순차 생성하고, 각각 결과를 보고한다
+- 필드 정의 API를 호출하여 필드를 탐색하지 않는다 — 위 검증된 필드 ID 표를 사용한다
 
 $ARGUMENTS
