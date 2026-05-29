@@ -470,6 +470,167 @@ def cmd_leaves(args):
     print(f"총 {len(leaves)}건, 연차 {total_deduction}일 차감")
 
 
+def _resolve_approver(config, eid):
+    """승인자 employee_id를 결정한다. config 캐시 → 과거 요청 내역의 승인자 순으로 탐색."""
+    approver_id = config.get("approver_id")
+    if approver_id:
+        return approver_id
+    now = datetime.now()
+    year_start = now.replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    year_end = now.replace(year=now.year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    all_req = api_request("POST", "/api/batch", config, {
+        "requests": {"employee_ids": [eid], "date_ranges": [[year_start, year_end]]}
+    })
+    for r in all_req.get("requests", []):
+        approvals = r.get("requested_employee_approvals", [])
+        if approvals:
+            approver_id = approvals[0]["employee_id"]
+            config["approver_id"] = approver_id
+            save_config(config)
+            return approver_id
+    return None
+
+
+def _discover_leave_types(config, eid):
+    """과거 휴가 기록 + create_leaves 요청에서 신청 가능한 휴가 유형 템플릿을 수집한다.
+
+    회사마다 leave_group_id·유급시간·차감량이 다르므로 하드코딩하지 않고
+    실제 사용 이력에서 정확한 값을 가져온다. {유형명: 템플릿} 형태로 반환.
+    """
+    FIELDS = ("leave_group_id", "name", "leave_type", "paid_hours", "deemed_working_hours",
+              "deduction_amount", "annual_leave_deduction", "use_paid_hours", "is_offday", "is_holiday")
+    now = datetime.now()
+    start = now.replace(year=now.year - 2, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    end = now.replace(year=now.year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
+    types = {}
+
+    data = api_request("POST", "/api/batch", config, {
+        "leaves": {"employee_ids": [eid], "date_ranges": [[start, end]]}
+    })
+    for l in data.get("leaves", []):
+        name = l.get("name") or l.get("leave_type")
+        if name and name not in types:
+            types[name] = {k: l.get(k) for k in FIELDS}
+
+    # create_leaves 요청에는 tags 등 신청 시 필요한 추가 필드가 들어있다
+    data = api_request("POST", "/api/batch", config, {
+        "requests": {"employee_ids": [eid], "date_ranges": [[start, end]]}
+    })
+    for r in data.get("requests", []):
+        d = r.get("data", {})
+        if d.get("requestType") == "create_leaves":
+            name = d.get("name") or d.get("leave_type")
+            if not name:
+                continue
+            t = types.setdefault(name, {k: d.get(k) for k in FIELDS})
+            if t.get("tags") is None:
+                t["tags"] = d.get("tags")
+    return types
+
+
+def cmd_leave(args):
+    """휴가 신청 (create_leaves 요청 생성)"""
+    config = load_config()
+    eid = config["employee_id"]
+    types = _discover_leave_types(config, eid)
+
+    # 유형 목록 표시 (--list 또는 날짜 미지정)
+    if args.list or not args.date:
+        if not types:
+            print("과거 휴가 기록이 없어 신청 가능한 유형을 찾지 못했습니다.")
+            print("회사 관리자에게 휴가 유형을 문의하세요.")
+            return
+        print("신청 가능한 휴가 유형 (과거 기록 기준):")
+        print(f"  {'유형':<10} {'유급시간':<10} {'연차차감':<8}")
+        print("  " + "-" * 32)
+        for name, t in types.items():
+            print(f"  {name:<10} {str(t.get('paid_hours', '?')) + 'h':<10} {str(t.get('annual_leave_deduction', '?')) + '일':<8}")
+        print("\n예: shiftee leave 2026-06-15 --type 연차")
+        print("    shiftee leave 2026-06-15 --type 반차 --half am")
+        return
+
+    if not types:
+        print("신청 가능한 휴가 유형을 찾지 못했습니다 (과거 휴가 기록 없음).")
+        sys.exit(1)
+
+    # 유형 선택 (기본: 연차 → 없으면 첫 번째 유형)
+    type_name = args.type or ("연차" if "연차" in types else next(iter(types)))
+    if type_name not in types:
+        print(f"'{type_name}' 유형을 찾을 수 없습니다. 사용 가능: {', '.join(types)}")
+        print("'shiftee leave --list'로 확인하세요.")
+        sys.exit(1)
+    tpl = types[type_name]
+
+    # 반차/반일 여부 (유급 4시간 이하 또는 연차 차감 1일 미만)
+    is_half = (tpl.get("paid_hours") or 0) <= 4 or (tpl.get("annual_leave_deduction") or 0) < 1
+
+    date_str = args.date
+
+    def kst_to_utc(hh, mm, ss=0):
+        kst = datetime.strptime(date_str, "%Y-%m-%d").replace(hour=hh, minute=mm, second=ss)
+        return (kst - timedelta(hours=9)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if args.start and args.end:
+        sh, sm = map(int, args.start.split(":"))
+        eh, em = map(int, args.end.split(":"))
+        leave_span = [kst_to_utc(sh, sm), kst_to_utc(eh, em)]
+        span_desc = f"{args.start}~{args.end}"
+    elif is_half:
+        if args.half == "pm":
+            leave_span = [kst_to_utc(14, 0), kst_to_utc(18, 0)]
+            span_desc = "오후 14:00~18:00"
+        else:
+            leave_span = [kst_to_utc(9, 0), kst_to_utc(13, 0)]
+            span_desc = "오전 09:00~13:00"
+    else:
+        leave_span = [kst_to_utc(0, 0), kst_to_utc(23, 59, 59)]
+        span_desc = "종일"
+
+    approver_id = _resolve_approver(config, eid)
+    if not approver_id:
+        print("승인자를 찾을 수 없습니다. config.json에 approver_id를 추가하세요.")
+        sys.exit(1)
+
+    request_body = {
+        "requested_employee_ids": [approver_id],
+        "data": {
+            "leave_group_id": tpl.get("leave_group_id"),
+            "create_shifts_request_id": None,
+            "name": tpl.get("name"),
+            "leave_type": tpl.get("leave_type"),
+            "display_name": None,
+            "paid_hours": tpl.get("paid_hours"),
+            "deemed_working_hours": tpl.get("deemed_working_hours"),
+            "deduction_amount": tpl.get("deduction_amount"),
+            "annual_leave_deduction": tpl.get("annual_leave_deduction"),
+            "use_paid_hours": tpl.get("use_paid_hours", True),
+            "is_offday": tpl.get("is_offday", False),
+            "is_holiday": tpl.get("is_holiday", False),
+            "confirmation_text_for_clock_in": None,
+            "can_display_note": True,
+            "delete_fully_included_shifts": False,
+            "leave_times": [leave_span],
+            "tags": tpl.get("tags") or ["contractual_working_hours_unmet"],
+            "custom_tags": None,
+            "note": args.note or ".",
+            "requestType": "create_leaves",
+        },
+    }
+
+    weekday_names = ["월", "화", "수", "목", "금", "토", "일"]
+    wd = weekday_names[datetime.strptime(date_str, "%Y-%m-%d").weekday()]
+    print("휴가 신청 요청:")
+    print(f"  날짜: {date_str} ({wd})")
+    print(f"  유형: {tpl.get('name')} ({span_desc})")
+    print(f"  연차 차감: {tpl.get('annual_leave_deduction')}일")
+    print(f"  사유: {args.note if args.note and args.note != '.' else '(없음)'}")
+    print(f"  승인자: {approver_id}")
+
+    result = api_request("POST", "/api/request", config, request_body)
+    req = result["request"]
+    print(f"\n신청 완료! (request_id: {req['request_id']}, 상태: {req['status']})")
+
+
 def cmd_fix(args):
     """출퇴근 수정 요청"""
     config = load_config()
@@ -490,33 +651,7 @@ def cmd_fix(args):
 
     attendances = data.get("attendances", [])
 
-    # 승인자 ID 조회 (최근 요청에서 가져오기)
-    req_data = api_request("POST", "/api/batch", config, {
-        "requests": {
-            "employee_ids": [eid],
-            "date_ranges": [[start, end]],
-        }
-    })
-    # 최근 승인된 요청에서 승인자 찾기
-    approver_id = config.get("approver_id")
-    if not approver_id:
-        # 올해 요청에서 승인자 찾기
-        year_start = datetime.now().replace(month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
-        year_end = datetime.now().replace(year=datetime.now().year + 1, month=1, day=1).strftime("%Y-%m-%dT00:00:00Z")
-        all_req = api_request("POST", "/api/batch", config, {
-            "requests": {
-                "employee_ids": [eid],
-                "date_ranges": [[year_start, year_end]],
-            }
-        })
-        for r in all_req.get("requests", []):
-            approvals = r.get("requested_employee_approvals", [])
-            if approvals:
-                approver_id = approvals[0]["employee_id"]
-                config["approver_id"] = approver_id
-                save_config(config)
-                break
-
+    approver_id = _resolve_approver(config, eid)
     if not approver_id:
         print("승인자를 찾을 수 없습니다. config.json에 approver_id를 추가하세요.")
         sys.exit(1)
@@ -831,7 +966,10 @@ def main():
   shiftee attendance -m 3    3월 출퇴근 기록
   shiftee schedule           이번 주 스케줄
   shiftee schedule --month   이번 달 스케줄
-  shiftee leaves             올해 휴가 기록
+  shiftee leaves             올해 휴가 기록 조회
+  shiftee leave --list       신청 가능한 휴가 유형
+  shiftee leave 2026-06-15 --type 연차        종일 연차 신청
+  shiftee leave 2026-06-15 --type 반차 --half am   오전 반차 신청
   shiftee me                 내 정보
   shiftee missing               출퇴근 누락 조회
   shiftee fix clock-out 2026-03-26 21:00   퇴근 수정 요청
@@ -856,7 +994,16 @@ def main():
     sch.add_argument("-w", "--week", action="store_true", default=True, help="이번 주 (기본)")
     sch.add_argument("-m", "--month", action="store_true", help="이번 달")
 
-    sub.add_parser("leaves", help="휴가 기록")
+    sub.add_parser("leaves", help="휴가 기록 조회")
+
+    leave = sub.add_parser("leave", help="휴가 신청")
+    leave.add_argument("date", nargs="?", help="휴가 날짜 (예: 2026-06-15)")
+    leave.add_argument("-t", "--type", help="휴가 유형 (예: 연차, 반차). 기본: 연차")
+    leave.add_argument("--half", choices=["am", "pm"], default="am", help="반차일 때 오전(am)/오후(pm), 기본: am")
+    leave.add_argument("--start", help="직접 시작시간 KST (예: 09:00)")
+    leave.add_argument("--end", help="직접 종료시간 KST (예: 13:00)")
+    leave.add_argument("-l", "--list", action="store_true", help="신청 가능한 휴가 유형 목록")
+    leave.add_argument("-n", "--note", default=".", help="사유 메모")
 
     fix = sub.add_parser("fix", help="출퇴근 수정/생성 요청")
     fix.add_argument("action", choices=["clock-in", "clock-out", "create"], help="수정 유형")
@@ -887,6 +1034,7 @@ def main():
         "attendance": cmd_attendance,
         "schedule": cmd_schedule,
         "leaves": cmd_leaves,
+        "leave": cmd_leave,
         "fix": cmd_fix,
         "cancel": cmd_cancel,
         "requests": cmd_requests,

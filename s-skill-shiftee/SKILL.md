@@ -63,7 +63,10 @@ $SHIFTEE login
 | `$SHIFTEE attendance -d 2026-04-01` | 특정 날짜 출퇴근 | |
 | `$SHIFTEE schedule` | 이번 주 스케줄 | |
 | `$SHIFTEE schedule --month` | 이번 달 스케줄 | |
-| `$SHIFTEE leaves` | 올해 휴가 기록 | |
+| `$SHIFTEE leaves` | 올해 휴가 기록 조회 | |
+| `$SHIFTEE leave --list` | 신청 가능한 휴가 유형 | |
+| `$SHIFTEE leave DATE --type 연차` | 종일 연차 신청 | `leave 2026-06-15 --type 연차` |
+| `$SHIFTEE leave DATE --type 반차 --half am` | 반차 신청 (am/pm) | `leave 2026-06-16 --type 반차 --half pm` |
 | `$SHIFTEE missing` | 출퇴근 누락 조회 | |
 | `$SHIFTEE fix clock-in DATE TIME` | 출근 수정 요청 | `fix clock-in 2026-03-26 09:30` |
 | `$SHIFTEE fix clock-out DATE TIME` | 퇴근 수정 요청 | `fix clock-out 2026-03-26 21:00` |
@@ -76,6 +79,18 @@ $SHIFTEE login
 ```bash
 $SHIFTEE leaves
 ```
+
+### "휴가 신청해줘" / "6월 15일 연차 써줘" / "내일 반차"
+실제 휴가 신청을 회사에 제출하는 동작이다. 신청 전 반드시 사용자에게 **날짜·유형(연차/반차)·반차일 경우 오전/오후·사유**를 확인하고, `AskUserQuestion`으로 최종 승인을 받은 뒤 실행한다.
+```bash
+$SHIFTEE leave --list                              # 어떤 유형이 있는지 먼저 확인
+$SHIFTEE leave 2026-06-15 --type 연차 -n "사유"     # 종일 연차
+$SHIFTEE leave 2026-06-16 --type 반차 --half am     # 오전 반차 (09:00~13:00)
+$SHIFTEE leave 2026-06-16 --type 반차 --half pm     # 오후 반차 (14:00~18:00)
+$SHIFTEE leave 2026-06-15 --start 13:00 --end 17:00 # 시간 직접 지정
+```
+- 휴가 유형(연차/반차 등)·유급시간·차감량은 **과거 휴가 기록에서 자동 수집**한다. 기록이 없으면 `leave --list`가 비어 있을 수 있다.
+- 오전 반차는 09:00~13:00, 오후 반차는 14:00~18:00 KST가 기본값이다. 회사 근무시간이 다르면 `--start`/`--end`로 직접 지정한다.
 
 ### "오늘 출퇴근 했어?" / "오늘 근무"
 ```bash
@@ -112,7 +127,8 @@ $SHIFTEE fix create 2026-04-15 09:30 --time2 18:00 -n "사유"
 - CLI 출력을 그대로 붙여넣지 말고, 사용자가 이해하기 쉽게 요약해서 답한다.
 - 휴가 기록은 날짜, 유형(연차/반차/병가 등), 사유를 표 형태로 정리한다.
 - 출퇴근 기록도 날짜별로 깔끔하게 정리한다.
-- **`fix` 명령은 실제 수정 요청을 보내므로, 실행 전 반드시 사용자 확인을 받는다.** `AskUserQuestion`으로 최종 승인 후 실행.
+- **`fix`·`leave` 명령은 실제 요청을 회사에 제출하므로, 실행 전 반드시 사용자 확인을 받는다.** `AskUserQuestion`으로 최종 승인 후 실행.
+- 휴가 신청 시 날짜·유형·반차 오전/오후·사유를 명확히 확인한다. 유형이 불확실하면 먼저 `leave --list`로 사용 가능한 유형을 보여준다.
 - "설정 파일이 없습니다" 에러가 나면 아직 로그인 전이다. 대화형 로그인이므로 사용자에게 `!$SHIFTEE login`을 직접 실행하라고 안내한다 (Claude가 비밀번호를 대신 입력할 수 없음).
 
 $ARGUMENTS
