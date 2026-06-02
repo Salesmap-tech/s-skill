@@ -116,8 +116,8 @@ TOKEN=${SALESMAP_API_TOKEN:-$(grep SALESMAP_API_TOKEN ~/.zshrc | sed 's/.*"\(.*\
 | 기능 카테고리 | `bd9561e3-fab6-4fe6-b610-798d9542d11a` | multiSelect | 아래 옵션 목록 참조 |
 | 제보 일자 | `1930963f-eaf5-4d29-a2a8-9676187665e6` | date | 미검증 — 실패 시 스킵 |
 | 담당자 | 미확정 | user | 미검증 — 실패 시 스킵 |
-| 요청사 | `6cf84776-146a-4b9e-bd1e-2e9f2dcbc5e9` | multiOrganization | 미검증 — 실패 시 스킵 |
-| 요청자 | `e59cd00d-17d2-4e68-bb1b-3a90f3c1e86e` | multiPeople | 미검증 — 실패 시 스킵 |
+| 요청사 | `6cf84776-146a-4b9e-bd1e-2e9f2dcbc5e9` | multiOrganization | 검증됨 — `organizationValueIdList` 사용 |
+| 요청자 | `e59cd00d-17d2-4e68-bb1b-3a90f3c1e86e` | multiPeople | 검증됨 — `peopleValueIdList` 사용 |
 
 ##### SDR 티켓 필드 ID
 
@@ -161,14 +161,47 @@ SDR 티켓 필드 ID가 검증되면 이 표를 업데이트할 것.
 
 인터뷰 대상 고객사/담당자가 특정되면 티켓에 연결한다. 연결 가능하면 묻지 않고 바로 연결한다.
 
+##### 검색 API 스키마 (검증됨)
+
+```
+POST /v2/object/{targetType}/search
+```
+
+- **targetType**: `people`, `organization`, `deal`, `lead`
+- **요청 바디**:
+
+```json
+{
+  "filterGroupList": [
+    {
+      "filters": [
+        {
+          "fieldName": "이름",
+          "operator": "CONTAINS",
+          "value": "검색어"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `fieldName`: **한글 필드명** 사용 (예: `"이름"`, `"이메일"`)
+- `operator`: **대문자** (예: `EQ`, `CONTAINS`, `IN`, `EXISTS`, `NOT_EXISTS`, `LT`, `GTE` 등)
+- `filterGroupList`: 최대 3개 그룹, 그룹 간 OR
+- `filters`: 그룹 내 최대 3개, 필터 간 AND
+- 응답: ID와 name만 포함
+
+##### 연결 절차
+
 1. **요청사** (회사) 검색 및 연결:
    - `POST /v2/object/organization/search`로 회사명 검색하여 UUID 확보
-   - `{ "name": "요청사", "organizationValueIdList": ["<ORG_UUID>"] }`로 설정
+   - 티켓 수정 시 `{ "name": "요청사", "organizationValueIdList": ["<ORG_UUID>"] }`로 설정
 2. **요청자** (고객) 검색 및 연결:
    - `POST /v2/object/people/search`로 담당자명 검색하여 UUID 확보
-   - `{ "name": "요청자", "peopleValueIdList": ["<PEOPLE_UUID>"] }`로 설정
+   - 티켓 수정 시 `{ "name": "요청자", "peopleValueIdList": ["<PEOPLE_UUID>"] }`로 설정
 3. 검색 결과가 여러 건이면 사용자에게 확인
-4. 검색 API 형식 오류 시 스킵하고 사용자에게 수동 연결 안내 (API 스키마 미확정)
+4. **티켓 수정은 `POST /v2/custom-object/{id}`** (PATCH 아님)
 
 #### 4-5. 노트(메모)로 상세 내용 작성
 
